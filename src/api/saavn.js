@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 
 // Use direct URL for production/Android, proxy for local dev
 const SAAVN_API_BASE =
-    'https://music-player-production-006d.up.railway.app/api/saavn';
+    'https://devsyncapp.in/music/api/saavn';
 
 export const saavnApi = {
     // Search for songs
