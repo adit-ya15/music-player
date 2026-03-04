@@ -1,8 +1,8 @@
 import axios from 'axios';
 
+// Mobile app calls EC2 backend directly
 // In dev, Vite proxies /api/saavn → saavn.sumit.co
-// In production, server.mjs proxies /api/saavn → saavn.sumit.co
-const SAAVN_API_BASE = 'https://saavn.sumit.co';
+const SAAVN_API_BASE = 'https://music.devsynsapp.in/api/saavn';
 
 export const saavnApi = {
     // Search for songs

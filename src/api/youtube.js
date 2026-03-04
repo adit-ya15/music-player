@@ -1,13 +1,13 @@
 // ═══════════════════════════════════════════════════════════
 // YouTube Music API — powered by youtubei.js backend
-// Calls the local Express server via Vite proxy (/api/yt)
+// Mobile app calls EC2 backend directly
 // ═══════════════════════════════════════════════════════════
 
 import axios from 'axios';
 
+// Mobile app calls EC2 backend
 // In dev, Vite proxies /api/yt → localhost:3001
-// In production, Nginx routes /music/api/yt → server.mjs
-const YT_API_BASE = 'https://music.devsyncapp.in/api/yt';
+const YT_API_BASE = 'https://music.devsynsapp.in/api/yt';
 
 export const youtubeApi = {
 

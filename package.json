@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node server.mjs",
-    "dev:all": "node server.mjs & vite",
+    "dev:all": "node scripts/dev-all.mjs",
     "build": "vite build",
     "start": "node server.mjs",
     "lint": "eslint .",
@@ -40,3 +40,4 @@
     "vite-plugin-pwa": "^1.2.0"
   }
 }
+
