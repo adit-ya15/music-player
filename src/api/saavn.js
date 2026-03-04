@@ -1,7 +1,9 @@
 import axios from 'axios';
+import { Capacitor } from '@capacitor/core';
 
-// Proxied through Vite dev server to bypass CORS
-const SAAVN_API_BASE = '/api/saavn';
+// Use direct URL for production/Android, proxy for local dev
+const SAAVN_API_BASE =
+    'https://music-player-production-006d.up.railway.app/api/saavn';
 
 export const saavnApi = {
     // Search for songs

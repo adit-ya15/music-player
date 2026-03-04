@@ -41,7 +41,36 @@ export default function MobilePlayer({ onOpenLyrics, onOpenQueue }) {
         };
     }, [isExpanded]);
 
+
+    useEffect(() => {
+        if (!("mediaSession" in navigator) || !currentTrack) return;
+
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: currentTrack.title,
+            artist: currentTrack.artist,
+            album: currentTrack.album || "Aura Music",
+            artwork: [
+                { src: currentTrack.coverArt, sizes: "96x96", type: "image/png" },
+                { src: currentTrack.coverArt, sizes: "192x192", type: "image/png" },
+                { src: currentTrack.coverArt, sizes: "512x512", type: "image/png" }
+            ]
+        });
+
+        navigator.mediaSession.setActionHandler("play", togglePlay);
+        navigator.mediaSession.setActionHandler("pause", togglePlay);
+        navigator.mediaSession.setActionHandler("nexttrack", skipNext);
+        navigator.mediaSession.setActionHandler("previoustrack", skipPrev);
+
+    }, [currentTrack, togglePlay, skipNext, skipPrev]);
+
+    useEffect(() => {
+        if ("mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+        }
+    }, [isPlaying]);
+
     if (!currentTrack) return null;
+
 
     const formatTime = (time) => {
         if (!time && time !== 0) return '0:00';

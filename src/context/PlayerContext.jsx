@@ -20,6 +20,25 @@ export const PlayerProvider = ({ children }) => {
     const [dominantColor, setDominantColor] = useState('rgba(15, 15, 19, 1)');
 
     const audioRef = useRef(new Audio());
+    const nextTrackCache = useRef(null);
+
+    const prefetchNextTrack = useCallback(async (track) => {
+        if (!track || track.source !== 'youtube') return;
+
+        try {
+            const vid = track.videoId || track.id.replace(/^yt-/, '');
+            const details = await youtubeApi.getStreamDetails(vid);
+
+            if (details?.streamUrl) {
+                nextTrackCache.current = {
+                    id: track.id,
+                    streamUrl: details.streamUrl
+                };
+            }
+        } catch (err) {
+            console.warn("Prefetch failed:", err);
+        }
+    }, []);
 
     // ── Play / Pause ──────────────────────────────
     const togglePlay = useCallback(() => {
@@ -41,6 +60,12 @@ export const PlayerProvider = ({ children }) => {
 
         try {
             let url = track.streamUrl;
+
+            // use prefetched stream if available
+            if (nextTrackCache.current && nextTrackCache.current.id === track.id) {
+                url = nextTrackCache.current.streamUrl;
+                nextTrackCache.current = null;
+            }
 
             if (track.source === 'youtube' && !url) {
                 const vid = track.videoId || track.id.replace(/^yt-/, '');
@@ -100,6 +125,15 @@ export const PlayerProvider = ({ children }) => {
         setQueueIndex(nextIdx);
         loadAndPlay(queue[nextIdx]);
     }, [queue, queueIndex, shuffleMode, repeatMode, loadAndPlay, getShuffledIndex]);
+
+    useEffect(() => {
+        if (queue.length === 0) return;
+
+        const nextIdx = queueIndex + 1;
+        if (nextIdx < queue.length) {
+            prefetchNextTrack(queue[nextIdx]);
+        }
+    }, [queueIndex, queue, prefetchNextTrack]);
 
     // ── Skip Previous ─────────────────────────────
     const skipPrev = useCallback(() => {

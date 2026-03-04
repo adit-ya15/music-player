@@ -5,7 +5,7 @@
 
 import axios from 'axios';
 
-const YT_API_BASE = 'https://music-player-4mnv.onrender.com';
+const YT_API_BASE = 'https://music-player-production-006d.up.railway.app/api/yt';
 
 export const youtubeApi = {
 
