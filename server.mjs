@@ -9,7 +9,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT;
 const app = express();
 
 // resolve dirname
@@ -358,7 +358,7 @@ app.get(/^\/(?!api).*/, (req, res) => {
 // start server
 // ─────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
     console.log(`Aura server running on port ${PORT}`);
 
     getYT().catch((err) =>
