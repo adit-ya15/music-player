@@ -16,6 +16,12 @@ const execFileAsync = promisify(execFile);
 const PORT = process.env.PORT || 3001;
 const app = express();
 
+const YT_DLP_BIN = process.env.YT_DLP_BIN || "yt-dlp";
+const YT_COOKIES_FILE = process.env.YT_COOKIES_FILE;
+const YT_SOURCE_ADDRESS = process.env.YT_SOURCE_ADDRESS;
+const YT_EXTRACTOR_ARGS =
+    process.env.YT_EXTRACTOR_ARGS || "youtube:player-client=default,mweb";
+
 // resolve dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -267,13 +273,25 @@ async function getStreamUrl(videoId) {
     const cached = streamCache.get(videoId);
     if (cached && cached.expiry > Date.now()) return cached.url;
 
-    // Use web client to trigger the yt-dlp-youtube-oauth2 plugin for AWS IPs
-    const { stdout } = await execFileAsync("yt-dlp", [
-        "-f", "bestaudio",
-        "--extractor-args", "youtube:player-client=web",
+    const args = [
+        "-f",
+        "bestaudio",
+        "--extractor-args",
+        YT_EXTRACTOR_ARGS,
         "--get-url",
-        `https://music.youtube.com/watch?v=${videoId}`,
-    ], { timeout: 15000 });
+    ];
+
+    if (YT_COOKIES_FILE) {
+        args.push("--cookies", YT_COOKIES_FILE);
+    }
+
+    if (YT_SOURCE_ADDRESS) {
+        args.push("--source-address", YT_SOURCE_ADDRESS);
+    }
+
+    args.push(`https://music.youtube.com/watch?v=${videoId}`);
+
+    const { stdout } = await execFileAsync(YT_DLP_BIN, args, { timeout: 15000 });
 
     const url = stdout.trim();
     if (!url) throw new Error("yt-dlp returned no URL");
@@ -398,3 +416,4 @@ app.listen(PORT, "0.0.0.0", () => {
         console.error("Session init error:", err.message)
     );
 });
+
