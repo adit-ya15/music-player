@@ -75,6 +75,8 @@ app.use(
         target: "https://saavn.sumit.co",
         changeOrigin: true,
         pathRewrite: {
+            // Nginx strips `/music/api/saavn`, we keep it as `/api`
+            // If user's EC2 strips `music` prefix we receive `/api/saavn/search`, rewrite it to `/api/search`
             "^/api/saavn": "/api"
         }
     })
