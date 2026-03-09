@@ -401,7 +401,10 @@ function parseDuration(text) {
 app.use(express.static(path.join(__dirname, "dist")));
 
 // SPA fallback (but ignore API routes)
-app.get(/^\/(?!api).*/, (req, res) => {
+app.get('*', (req, res) => {
+    if (req.path.startsWith('/api')) {
+        return res.status(404).send('API route not found');
+    }
     res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 

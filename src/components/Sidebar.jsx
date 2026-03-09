@@ -2,9 +2,9 @@ import { Music, TrendingUp, Library, Heart, Plus, X, Clock } from 'lucide-react'
 import { useState } from 'react';
 
 const NAV_ITEMS = [
-  { id: 'discover', label: 'Discover', icon: Music },
-  { id: 'trending', label: 'Trending', icon: TrendingUp },
-  { id: 'library', label: 'Library', icon: Library },
+  { id: 'home', label: 'Home', icon: Music },
+  { id: 'search', label: 'Search', icon: TrendingUp },
+  { id: 'your-library', label: 'Your Library', icon: Library },
   { id: 'history', label: 'Recently Played', icon: Clock },
   { id: 'most-played', label: 'Most Played', icon: TrendingUp },
   { id: 'short-tracks', label: 'Short Tracks', icon: Music },

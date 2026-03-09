@@ -32,7 +32,7 @@ function App() {
     setQueue,
   } = usePlayer();
 
-  const [activeTab, setActiveTab] = useState('trending');
+  const [activeTab, setActiveTab] = useState('home');
   const [topTracks, setTopTracks] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,7 +190,7 @@ function App() {
   }, [favorites, history, getRecommendationsFor]);
 
   useEffect(() => {
-    if (activeTab !== 'discover') return;
+    if (activeTab !== 'home') return;
     loadDiscover();
   }, [activeTab, loadDiscover]);
 
@@ -318,9 +318,9 @@ function App() {
     const playlist = playlists.find((item) => item.id === playlistMatch[1]);
     displayedTracks = playlist?.tracks || [];
     sectionTitle = playlist?.name || 'Playlist';
-  } else if (activeTab === 'trending' || activeTab === 'library') {
+  } else if (activeTab === 'home' || activeTab === 'your-library') {
     displayedTracks = topTracks;
-    sectionTitle = activeTab === 'library' ? 'Your Library' : 'Top Tracks';
+    sectionTitle = activeTab === 'your-library' ? 'Your Library' : 'Top Tracks';
   }
 
   const renderedTracks = displayedTracks.slice(0, 150);
@@ -382,12 +382,12 @@ function App() {
   const tabContentKey = activeTab === 'search' ? `search-${searchQuery}` : activeTab;
   const sectionError = activeTab === 'search'
     ? searchError
-    : activeTab === 'trending' || activeTab === 'library'
+    : activeTab === 'home' || activeTab === 'your-library'
     ? trendingError
     : null;
   const sectionLoading = activeTab === 'search'
     ? isSearchLoading
-    : activeTab === 'trending' || activeTab === 'library'
+    : activeTab === 'home' || activeTab === 'your-library'
     ? isTrendingLoading
     : false;
 
@@ -413,7 +413,7 @@ function App() {
 
         <div className="content-scroll">
           <div key={tabContentKey} className="tab-content-enter">
-            {activeTab === 'discover' && (
+            {activeTab === 'home' && (
               <div className="discover-view">
                 {isDiscoverLoading && !discoverSections.length && !personalMix && !dailyMix && (
                   <AsyncState state="loading" title="Preparing Discover" message="Building your mixes and fresh picks..." />
@@ -471,6 +471,27 @@ function App() {
                           track={track}
                           trackList={personalMix.tracks}
                           playMode="radio"
+                          isFavorite={favorites.some((favoriteTrack) => favoriteTrack.id === track.id)}
+                          onToggleFavorite={toggleFavorite}
+                          onContextMenu={handleTrackContextMenu}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {history.length > 0 && (
+                  <section className="track-section">
+                    <div className="section-header">
+                      <h2>Recently Played</h2>
+                    </div>
+                    <div className="track-grid">
+                      {history.slice(0, 10).map((track, index) => (
+                        <TrackCard
+                          key={track.id + index}
+                          track={track}
+                          trackList={history}
                           isFavorite={favorites.some((favoriteTrack) => favoriteTrack.id === track.id)}
                           onToggleFavorite={toggleFavorite}
                           onContextMenu={handleTrackContextMenu}

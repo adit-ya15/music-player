@@ -82,6 +82,35 @@ export default function PlaybackBar({ onOpenLyrics, onOpenQueue }) {
       </div>
 
       <div className="player-controls">
+        <div className="progress-container">
+          <span className="time current">{formatTime(progress)}</span>
+          <div
+            className="progress-bar-bg"
+            onClick={handleProgressClick}
+            role="slider"
+            tabIndex={0}
+            aria-label="Track progress"
+            aria-valuemin={0}
+            aria-valuemax={Math.max(duration || 0, 1)}
+            aria-valuenow={Math.min(progress || 0, duration || 0)}
+            onKeyDown={(e) => {
+              if (!duration) return;
+              if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                seekTo(Math.min(duration, (progress || 0) + 5));
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                seekTo(Math.max(0, (progress || 0) - 5));
+              }
+            }}
+          >
+            <div className="progress-bar-fill" style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}>
+              <div className="progress-thumb" />
+            </div>
+          </div>
+          <span className="time total">{formatTime(duration || currentTrack?.duration || 0)}</span>
+        </div>
+
         <div className="control-buttons">
           <button
             className={`control-btn icon-btn ${shuffleMode ? 'control-active' : ''}`}
@@ -126,35 +155,6 @@ export default function PlaybackBar({ onOpenLyrics, onOpenQueue }) {
           >
             <RepeatIcon size={16} />
           </button>
-        </div>
-
-        <div className="progress-container">
-          <span className="time current">{formatTime(progress)}</span>
-          <div
-            className="progress-bar-bg"
-            onClick={handleProgressClick}
-            role="slider"
-            tabIndex={0}
-            aria-label="Track progress"
-            aria-valuemin={0}
-            aria-valuemax={Math.max(duration || 0, 1)}
-            aria-valuenow={Math.min(progress || 0, duration || 0)}
-            onKeyDown={(e) => {
-              if (!duration) return;
-              if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                seekTo(Math.min(duration, (progress || 0) + 5));
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                seekTo(Math.max(0, (progress || 0) - 5));
-              }
-            }}
-          >
-            <div className="progress-bar-fill" style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}>
-              <div className="progress-thumb" />
-            </div>
-          </div>
-          <span className="time total">{formatTime(duration || currentTrack?.duration || 0)}</span>
         </div>
       </div>
 
