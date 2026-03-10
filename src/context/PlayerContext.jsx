@@ -181,6 +181,70 @@ export const PlayerProvider = ({ children }) => {
 
   }, [isPlaying, currentTrack]);
 
+  /* -------------------------- FETCH RECOMMENDATIONS (INFINITE AUTOPLAY) -------------------------- */
+
+  const fetchRecommendations = useCallback(async (seedTrack) => {
+    if (!seedTrack || isFetchingRecsRef.current) return [];
+    isFetchingRecsRef.current = true;
+
+    try {
+      const results = [];
+
+      // Strategy 1: YouTube Music "Up Next" (best quality recs)
+      const videoId = seedTrack.videoId || (seedTrack.source === 'youtube' ? seedTrack.id.replace(/^yt-/, '') : null);
+      if (videoId) {
+        try {
+          const upNext = await youtubeApi.getUpNextSafe(videoId);
+          if (upNext.ok) results.push(...upNext.data);
+        } catch {}
+      }
+
+      // Strategy 2: Saavn suggestions (if Saavn track)
+      if (seedTrack.source === 'saavn' && results.length < 5) {
+        try {
+          const suggestions = await saavnApi.getSongSuggestionsSafe(seedTrack.id);
+          if (suggestions.ok) results.push(...suggestions.data);
+        } catch {}
+      }
+
+      // Strategy 3: Search by artist name
+      if (results.length < 8 && seedTrack.artist) {
+        try {
+          const artistRes = await youtubeApi.searchSongsSafe(seedTrack.artist, 10);
+          if (artistRes.ok) results.push(...artistRes.data);
+        } catch {}
+      }
+
+      // Strategy 4: Search by title + artist keywords
+      if (results.length < 10) {
+        try {
+          const q = `${seedTrack.title} ${seedTrack.artist}`.trim();
+          const similarRes = await youtubeApi.searchSongsSafe(q, 8);
+          if (similarRes.ok) results.push(...similarRes.data);
+        } catch {}
+      }
+
+      // Deduplicate and filter out already played/queued tracks
+      const seen = new Set();
+      const currentQueue = queueRef.current;
+      const queueIds = new Set(currentQueue.map(t => t.id));
+
+      return results.filter(track => {
+        if (!track?.id) return false;
+        if (seen.has(track.id)) return false;
+        if (queueIds.has(track.id)) return false;
+        if (playedIdsRef.current.has(track.id)) return false;
+        seen.add(track.id);
+        return true;
+      }).slice(0, 20);
+    } catch (error) {
+      console.error('Recommendation fetch failed:', error);
+      return [];
+    } finally {
+      isFetchingRecsRef.current = false;
+    }
+  }, []);
+
   /* -------------------------- NEXT TRACK -------------------------- */
 
   const skipNext = useCallback(async () => {
@@ -289,70 +353,6 @@ export const PlayerProvider = ({ children }) => {
     const normalizedVol = Math.max(0, Math.min(1, vol));
     setVolumeState(normalizedVol);
     // Future: add native volume control when available
-  }, []);
-
-  /* -------------------------- FETCH RECOMMENDATIONS (INFINITE AUTOPLAY) -------------------------- */
-
-  const fetchRecommendations = useCallback(async (seedTrack) => {
-    if (!seedTrack || isFetchingRecsRef.current) return [];
-    isFetchingRecsRef.current = true;
-
-    try {
-      const results = [];
-
-      // Strategy 1: YouTube Music "Up Next" (best quality recs)
-      const videoId = seedTrack.videoId || (seedTrack.source === 'youtube' ? seedTrack.id.replace(/^yt-/, '') : null);
-      if (videoId) {
-        try {
-          const upNext = await youtubeApi.getUpNextSafe(videoId);
-          if (upNext.ok) results.push(...upNext.data);
-        } catch {}
-      }
-
-      // Strategy 2: Saavn suggestions (if Saavn track)
-      if (seedTrack.source === 'saavn' && results.length < 5) {
-        try {
-          const suggestions = await saavnApi.getSongSuggestionsSafe(seedTrack.id);
-          if (suggestions.ok) results.push(...suggestions.data);
-        } catch {}
-      }
-
-      // Strategy 3: Search by artist name
-      if (results.length < 8 && seedTrack.artist) {
-        try {
-          const artistRes = await youtubeApi.searchSongsSafe(seedTrack.artist, 10);
-          if (artistRes.ok) results.push(...artistRes.data);
-        } catch {}
-      }
-
-      // Strategy 4: Search by title + artist keywords
-      if (results.length < 10) {
-        try {
-          const q = `${seedTrack.title} ${seedTrack.artist}`.trim();
-          const similarRes = await youtubeApi.searchSongsSafe(q, 8);
-          if (similarRes.ok) results.push(...similarRes.data);
-        } catch {}
-      }
-
-      // Deduplicate and filter out already played/queued tracks
-      const seen = new Set();
-      const currentQueue = queueRef.current;
-      const queueIds = new Set(currentQueue.map(t => t.id));
-
-      return results.filter(track => {
-        if (!track?.id) return false;
-        if (seen.has(track.id)) return false;
-        if (queueIds.has(track.id)) return false;
-        if (playedIdsRef.current.has(track.id)) return false;
-        seen.add(track.id);
-        return true;
-      }).slice(0, 20);
-    } catch (error) {
-      console.error('Recommendation fetch failed:', error);
-      return [];
-    } finally {
-      isFetchingRecsRef.current = false;
-    }
   }, []);
 
   /* -------------------------- RECOMMENDATIONS FOR DISCOVER -------------------------- */
@@ -571,33 +571,41 @@ export const PlayerProvider = ({ children }) => {
   /* -------------------------- LOCK SCREEN CONTROLS & AUTOPLAY -------------------------- */
 
   useEffect(() => {
-    const nextListener = MusicPlayer.addListener('nextTrack', () => {
-      const repeat = repeatModeRef.current;
+    let nextListener, prevListener, statusListener;
 
-      // Natural track end with repeat-one: replay
-      if (repeat === 'one') {
-        const track = currentTrackRef.current;
-        if (track) loadAndPlayRef.current?.(track);
-        return;
+    (async () => {
+      try {
+        nextListener = await MusicPlayer.addListener('nextTrack', () => {
+          const repeat = repeatModeRef.current;
+
+          // Natural track end with repeat-one: replay
+          if (repeat === 'one') {
+            const track = currentTrackRef.current;
+            if (track) loadAndPlayRef.current?.(track);
+            return;
+          }
+
+          // All other cases: skipNext handles autoplay, shuffle, repeat-all
+          skipNextRef.current?.();
+        });
+
+        prevListener = await MusicPlayer.addListener('prevTrack', () => {
+          skipPrevRef.current?.();
+        });
+
+        statusListener = await MusicPlayer.addListener('statusUpdate', (data) => {
+          if (data.position != null) setProgress(data.position);
+          if (data.duration != null) setDuration(data.duration);
+        });
+      } catch {
+        // MusicPlayer plugin not available on web — ignore
       }
-
-      // All other cases: skipNext handles autoplay, shuffle, repeat-all
-      skipNextRef.current?.();
-    });
-
-    const prevListener = MusicPlayer.addListener('prevTrack', () => {
-      skipPrevRef.current?.();
-    });
-
-    const statusListener = MusicPlayer.addListener('statusUpdate', (data) => {
-      if (data.position != null) setProgress(data.position);
-      if (data.duration != null) setDuration(data.duration);
-    });
+    })();
 
     return () => {
-      if (nextListener?.remove) nextListener.remove();
-      if (prevListener?.remove) prevListener.remove();
-      if (statusListener?.remove) statusListener.remove();
+      nextListener?.remove?.();
+      prevListener?.remove?.();
+      statusListener?.remove?.();
     };
   }, []);
 

@@ -19,8 +19,7 @@ const app = express();
 const YT_DLP_BIN = process.env.YT_DLP_BIN || "yt-dlp";
 const YT_COOKIES_FILE = process.env.YT_COOKIES_FILE;
 const YT_SOURCE_ADDRESS = process.env.YT_SOURCE_ADDRESS;
-const YT_EXTRACTOR_ARGS =
-    process.env.YT_EXTRACTOR_ARGS || "youtube:player-client=default,mweb";
+const YT_EXTRACTOR_ARGS = process.env.YT_EXTRACTOR_ARGS || "";
 
 // resolve dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -135,43 +134,31 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
     const cached = streamCache.get(videoId);
 
     if (cached && cached.expiry > Date.now()) {
-        return res.json(cached.data);
+        return res.json({ videoId, streamUrl: cached.url });
     }
 
     try {
-        const innertube = await getYT();
-        const info = await innertube.music.getInfo(videoId);
+        const streamUrl = await getStreamUrl(videoId);
 
-        const best = info.chooseFormat({ type: 'audio', quality: 'best' });
-
-        if (!best) {
-            return res.json({
-                videoId,
-                streamUrl: null,
-            });
-        }
-
-        let streamUrl = best.url;
-
-        if (!streamUrl && best.decipher) {
-            streamUrl = await best.decipher(innertube.session?.player);
-        }
+        // Fetch metadata from youtubei.js (still works for info, just not stream URLs)
+        let title, author, duration, thumbnail;
+        try {
+            const innertube = await getYT();
+            const info = await innertube.music.getInfo(videoId);
+            title = info.basic_info?.title;
+            author = info.basic_info?.author;
+            duration = info.basic_info?.duration;
+            thumbnail = info.basic_info?.thumbnail?.[0]?.url;
+        } catch { /* metadata is optional */ }
 
         const responseData = {
             videoId,
-            title: info.basic_info?.title,
-            author: info.basic_info?.author,
-            duration: info.basic_info?.duration,
-            thumbnail: info.basic_info?.thumbnail?.[0]?.url,
-            streamUrl: String(streamUrl),
-            mimeType: best.mime_type,
-            bitrate: best.bitrate,
+            title,
+            author,
+            duration,
+            thumbnail,
+            streamUrl,
         };
-
-        streamCache.set(videoId, {
-            data: responseData,
-            expiry: Date.now() + CACHE_TTL,
-        });
 
         res.json(responseData);
     } catch (err) {
@@ -269,6 +256,11 @@ app.get("/api/yt/lyrics", async (req, res) => {
 // yt-dlp — get stream URL (cached)
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// get audio stream URL via yt-dlp
+// (youtubei.js decipher is currently broken — used only for metadata)
+// ─────────────────────────────────────────────
+
 async function getStreamUrl(videoId) {
     const cached = streamCache.get(videoId);
     if (cached && cached.expiry > Date.now()) return cached.url;
@@ -276,10 +268,12 @@ async function getStreamUrl(videoId) {
     const args = [
         "-f",
         "bestaudio",
-        "--extractor-args",
-        YT_EXTRACTOR_ARGS,
         "--get-url",
     ];
+
+    if (YT_EXTRACTOR_ARGS) {
+        args.push("--extractor-args", YT_EXTRACTOR_ARGS);
+    }
 
     if (YT_COOKIES_FILE) {
         args.push("--cookies", YT_COOKIES_FILE);

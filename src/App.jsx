@@ -665,7 +665,7 @@ function App() {
                         key={track.id + index}
                         track={track}
                         trackList={renderedTracks}
-                        playMode="list"
+                        playMode={activeTab === 'search' ? 'radio' : 'list'}
                         isFavorite={favorites.some((favoriteTrack) => favoriteTrack.id === track.id)}
                         onToggleFavorite={toggleFavorite}
                         onContextMenu={handleTrackContextMenu}
