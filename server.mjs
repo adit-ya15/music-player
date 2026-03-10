@@ -5,7 +5,7 @@
 
 import express from "express";
 import { Innertube } from "youtubei.js";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -257,35 +257,31 @@ app.get("/api/yt/lyrics", async (req, res) => {
 // ─────────────────────────────────────────────
 
 // ─────────────────────────────────────────────
-// get audio stream URL via yt-dlp
-// (youtubei.js decipher is currently broken — used only for metadata)
+// yt-dlp argument builder
+// ─────────────────────────────────────────────
+
+function ytDlpBaseArgs(videoId) {
+    const args = ["-f", "bestaudio", "--no-warnings", "--js-runtimes", "nodejs"];
+    if (YT_EXTRACTOR_ARGS) args.push("--extractor-args", YT_EXTRACTOR_ARGS);
+    if (YT_COOKIES_FILE) args.push("--cookies", YT_COOKIES_FILE);
+    if (YT_SOURCE_ADDRESS) args.push("--source-address", YT_SOURCE_ADDRESS);
+    args.push(`https://music.youtube.com/watch?v=${videoId}`);
+    return args;
+}
+
+// ─────────────────────────────────────────────
+// get audio stream URL via yt-dlp (used by /stream endpoint)
 // ─────────────────────────────────────────────
 
 async function getStreamUrl(videoId) {
     const cached = streamCache.get(videoId);
     if (cached && cached.expiry > Date.now()) return cached.url;
 
-    const args = [
-        "-f",
-        "bestaudio",
-        "--get-url",
-    ];
+    const args = ytDlpBaseArgs(videoId);
+    // Insert --get-url before the URL arg
+    args.splice(args.length - 1, 0, "--get-url");
 
-    if (YT_EXTRACTOR_ARGS) {
-        args.push("--extractor-args", YT_EXTRACTOR_ARGS);
-    }
-
-    if (YT_COOKIES_FILE) {
-        args.push("--cookies", YT_COOKIES_FILE);
-    }
-
-    if (YT_SOURCE_ADDRESS) {
-        args.push("--source-address", YT_SOURCE_ADDRESS);
-    }
-
-    args.push(`https://music.youtube.com/watch?v=${videoId}`);
-
-    const { stdout } = await execFileAsync(YT_DLP_BIN, args, { timeout: 15000 });
+    const { stdout } = await execFileAsync(YT_DLP_BIN, args, { timeout: 30000 });
 
     const url = stdout.trim();
     if (!url) throw new Error("yt-dlp returned no URL");
@@ -295,65 +291,98 @@ async function getStreamUrl(videoId) {
 }
 
 // ─────────────────────────────────────────────
-// pipe stream — server-side piped audio via yt-dlp
+// pipe stream — yt-dlp spawns and pipes audio directly
 // ─────────────────────────────────────────────
 
 app.get("/api/yt/pipe/:videoId", async (req, res) => {
     const { videoId } = req.params;
-    if (!videoId) return res.status(400).send("videoId required");
-
-    try {
-        const streamUrl = await getStreamUrl(videoId);
-
-        // Forward range header from client for seeking
-        const headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        };
-        if (req.headers.range) {
-            headers.Range = req.headers.range;
-        }
-
-        const upstream = await fetch(streamUrl, { headers });
-
-        res.status(upstream.status);
-
-        // Forward essential headers
-        const fwd = ["content-type", "content-length", "content-range", "accept-ranges"];
-        fwd.forEach((h) => {
-            const v = upstream.headers.get(h);
-            if (v) res.setHeader(h, v);
-        });
-
-        if (!upstream.headers.get("accept-ranges")) {
-            res.setHeader("Accept-Ranges", "bytes");
-        }
-
-        // Pipe the body
-        const reader = upstream.body.getReader();
-        const pump = async () => {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) { res.end(); return; }
-                if (!res.write(value)) {
-                    await new Promise((r) => res.once("drain", r));
-                }
-            }
-        };
-
-        pump().catch((err) => {
-            console.error("Pipe error:", err.message);
-            if (!res.headersSent) res.status(500).send("Stream error");
-            else res.end();
-        });
-
-        req.on("close", () => {
-            reader.cancel().catch(() => { });
-        });
-    } catch (err) {
-        console.error("Pipe error:", err.message);
-        if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!videoId || !/^[\w-]{11}$/.test(videoId)) {
+        return res.status(400).send("Invalid videoId");
     }
+
+    // Strategy 1: if we have a cached URL, proxy it (fast path)
+    const cached = streamCache.get(videoId);
+    if (cached && cached.expiry > Date.now()) {
+        try {
+            const headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            };
+            if (req.headers.range) headers.Range = req.headers.range;
+            const upstream = await fetch(cached.url, { headers });
+            if (upstream.ok || upstream.status === 206) {
+                return pipeUpstream(upstream, res);
+            }
+            // URL expired, remove from cache
+            streamCache.delete(videoId);
+        } catch { streamCache.delete(videoId); }
+    }
+
+    // Strategy 2: spawn yt-dlp and pipe audio directly to response
+    const args = ytDlpBaseArgs(videoId);
+    // Output to stdout
+    args.splice(args.length - 1, 0, "-o", "-");
+
+    res.setHeader("Content-Type", "audio/webm");
+    res.setHeader("Accept-Ranges", "none");
+
+    const proc = spawn(YT_DLP_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let hasData = false;
+    let stderrBuf = "";
+
+    proc.stdout.on("data", (chunk) => {
+        hasData = true;
+        if (!res.writableEnded) res.write(chunk);
+    });
+
+    proc.stderr.on("data", (chunk) => {
+        stderrBuf += chunk.toString();
+    });
+
+    proc.on("close", (code) => {
+        if (!hasData && !res.headersSent) {
+            console.error("yt-dlp pipe failed:", stderrBuf.slice(0, 500));
+            res.status(502).json({ error: "Stream unavailable" });
+        } else {
+            res.end();
+        }
+    });
+
+    proc.on("error", (err) => {
+        console.error("yt-dlp spawn error:", err.message);
+        if (!res.headersSent) res.status(500).json({ error: "Internal error" });
+        else res.end();
+    });
+
+    req.on("close", () => {
+        proc.kill("SIGTERM");
+    });
+
+    // Also try to cache the URL for future fast-path requests
+    getStreamUrl(videoId).catch(() => { /* best-effort */ });
 });
+
+function pipeUpstream(upstream, res) {
+    res.status(upstream.status);
+    const fwd = ["content-type", "content-length", "content-range", "accept-ranges"];
+    fwd.forEach((h) => {
+        const v = upstream.headers.get(h);
+        if (v) res.setHeader(h, v);
+    });
+    if (!upstream.headers.get("accept-ranges")) {
+        res.setHeader("Accept-Ranges", "bytes");
+    }
+    const reader = upstream.body.getReader();
+    const pump = async () => {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) { res.end(); return; }
+            if (!res.write(value)) {
+                await new Promise((r) => res.once("drain", r));
+            }
+        }
+    };
+    pump().catch(() => res.end());
+}
 
 // ─────────────────────────────────────────────
 // up-next / radio recommendations

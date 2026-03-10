@@ -59,6 +59,14 @@ export default function MobilePlayer({ onOpenLyrics, onOpenQueue }) {
       title: currentTrack.title,
       text: `${currentTrack.title} by ${currentTrack.artist}`,
     };
+
+    if (currentTrack.source === "youtube") {
+      const videoId = currentTrack.videoId || currentTrack.id?.replace(/^yt-/, "");
+      if (videoId) shareData.url = `https://music.youtube.com/watch?v=${videoId}`;
+    } else if (currentTrack.source === "saavn" && currentTrack.permaUrl) {
+      shareData.url = currentTrack.permaUrl;
+    }
+
     try {
       if (navigator.share) {
         await navigator.share(shareData);
