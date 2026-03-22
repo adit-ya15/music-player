@@ -30,10 +30,9 @@ export function buildYtdlpArgs(videoId, options = {}) {
   const {
     extractorArgs = process.env.YT_EXTRACTOR_ARGS || '',
     sourceAddress = process.env.YT_SOURCE_ADDRESS,
-    playerClient = process.env.YT_PLAYER_CLIENTS || 'android_vr,ios,android',
+    playerClient = process.env.YT_PLAYER_CLIENTS || 'android_vr',
     getUrl = false,
     outputToStdout = false,
-    jsRuntimeNode = false,
   } = options;
 
   // Important: avoid reading machine/user-level yt-dlp config (it can force cookies).
@@ -41,12 +40,8 @@ export function buildYtdlpArgs(videoId, options = {}) {
 
   // Basic headers help reduce bot-gating, without requiring cookies.
   // (Do NOT add cookies here.)
-  args.push('--add-header', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+  args.push('--add-header', 'User-Agent: com.google.android.youtube/19.09.37 (Linux; Android 13)');
   args.push('--add-header', 'Accept-Language: en-US,en;q=0.9');
-
-  if (jsRuntimeNode) {
-    args.push('--js-runtimes', 'node');
-  }
 
   // Always set a cookie-free player client. yt-dlp supports trying multiple clients via comma-separated list.
   if (playerClient) args.push('--extractor-args', `youtube:player_client=${playerClient}`);
@@ -62,6 +57,19 @@ export function buildYtdlpArgs(videoId, options = {}) {
   return args;
 }
 
+function isNonRetryableYtdlpError(stderr = '') {
+  const msg = String(stderr || '').toLowerCase();
+  return (
+    msg.includes('sign in to confirm') ||
+    msg.includes('cookies are required') ||
+    msg.includes('this video is age-restricted') ||
+    msg.includes('confirm your age') ||
+    msg.includes('please sign in') ||
+    msg.includes('account has been terminated') ||
+    msg.includes('private video')
+  );
+}
+
 export async function ytdlpGetUrl(bin, videoId, options = {}) {
   const timeoutMs = Math.max(
     1000,
@@ -71,11 +79,18 @@ export async function ytdlpGetUrl(bin, videoId, options = {}) {
 
   const { proc, done } = spawnWithTimeout(bin, args, { timeoutMs });
   const { out, err } = await collectStdout(proc);
-  await done;
+  const { code } = await done;
+
+  // Treat login/cookie-required content as unplayable without cookies.
+  // Return null (non-retryable) so higher-level retry logic doesn't keep hammering.
+  if (isNonRetryableYtdlpError(err)) {
+    logger.warn('provider.ytdlp', 'yt-dlp requires sign-in/cookies (skipping)', { videoId, code });
+    return null;
+  }
 
   const url = out.trim().split(/\r?\n/)[0]?.trim();
   if (!url) {
-    logger.warn('provider.ytdlp', 'yt-dlp returned no URL', { videoId, stderr: err.slice(0, 300) });
+    logger.warn('provider.ytdlp', 'yt-dlp returned no URL', { videoId, code, stderr: err.slice(0, 300) });
     return null;
   }
 

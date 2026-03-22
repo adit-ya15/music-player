@@ -21,6 +21,9 @@ import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.PlaybackException;
 import com.google.android.exoplayer2.Player;
+import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
+import com.google.android.exoplayer2.util.MimeTypes;
 
 public class MusicService extends Service {
 
@@ -35,6 +38,8 @@ public class MusicService extends Service {
     
     private static final String CHANNEL_ID = "MusicPlaybackChannel";
     private static final int NOTIFICATION_ID = 1;
+
+    private static final String HTTP_UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36";
 
     private ExoPlayer player;
     private MediaSessionCompat mediaSession;
@@ -72,7 +77,13 @@ public class MusicService extends Service {
         super.onCreate();
         createNotificationChannel();
 
-        player = new ExoPlayer.Builder(this).build();
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+            .setUserAgent(HTTP_UA)
+            .setAllowCrossProtocolRedirects(true);
+
+        player = new ExoPlayer.Builder(this)
+            .setMediaSourceFactory(new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory))
+            .build();
         player.addListener(new Player.Listener() {
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
@@ -219,7 +230,21 @@ public class MusicService extends Service {
     }
 
     public void playTrack(String url) {
-        MediaItem item = MediaItem.fromUri(url);
+        android.util.Log.d("MusicService", "playTrack url=" + url);
+
+        MediaItem.Builder builder = new MediaItem.Builder().setUri(url);
+        // Hint mime types for our known endpoints to help extractor selection.
+        if (url != null) {
+            if (url.contains("/api/yt/pipe/")) {
+                builder.setMimeType(MimeTypes.AUDIO_WEBM);
+            } else if (url.contains("mime=audio%2Fwebm") || url.contains("mime=audio/webm")) {
+                builder.setMimeType(MimeTypes.AUDIO_WEBM);
+            } else if (url.contains("mime=audio%2Fmp4") || url.contains("mime=audio/mp4")) {
+                builder.setMimeType(MimeTypes.AUDIO_MP4);
+            }
+        }
+
+        MediaItem item = builder.build();
         player.setMediaItem(item);
         player.prepare();
         player.play();

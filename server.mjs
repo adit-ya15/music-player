@@ -498,13 +498,13 @@ app.get("/api/yt/pipe/:videoId", async (req, res) => {
             });
         });
 
-        const first = await pipeAttempt({ playerClient: "android_vr,ios,android" });
+        const first = await pipeAttempt({ playerClient: "android_vr" });
         if (first.ok) {
             if (!res.writableEnded) res.end();
             return;
         }
 
-        const second = await pipeAttempt({ jsRuntimeNode: true, playerClient: "android_vr,ios,android" });
+        const second = await pipeAttempt({ playerClient: "android" });
         if (second.ok) {
             if (!res.writableEnded) res.end();
             return;
