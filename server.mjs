@@ -46,6 +46,24 @@ const YT_DLP_BIN = process.env.YT_DLP_BIN || "yt-dlp";
 const YT_SOURCE_ADDRESS = process.env.YT_SOURCE_ADDRESS;
 const YT_EXTRACTOR_ARGS = process.env.YT_EXTRACTOR_ARGS || "";
 
+const RECO_API_KEY = process.env.RECO_API_KEY || "";
+
+function requireRecoApiKey(req, res, next) {
+    if (!RECO_API_KEY) return next();
+
+    const headerKey = req.get("x-api-key") || req.get("x-api-key".toUpperCase());
+    const auth = req.get("authorization") || "";
+    const bearerKey = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+    const queryKey = req.query?.apiKey ? String(req.query.apiKey) : "";
+    const provided = headerKey || bearerKey || queryKey;
+
+    if (!provided || provided !== RECO_API_KEY) {
+        return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    return next();
+}
+
 // Cookies are intentionally disabled (yt-dlp runs without cookies).
 if (process.env.YT_COOKIES_FILE) {
     logger.warn("config", "Ignoring YT_COOKIES_FILE: cookies are disabled in this backend");
@@ -88,7 +106,7 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header(
         "Access-Control-Allow-Headers",
-        "Origin, X-Requested-With, Content-Type, Accept"
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-API-Key, x-api-key"
     );
     next();
 });
@@ -144,7 +162,7 @@ app.use(
 // user tracking + recommendations
 // ─────────────────────────────────────────────
 
-app.post("/api/track", async (req, res) => {
+app.post("/api/track", requireRecoApiKey, async (req, res) => {
     try {
         const { userId, songId, artist, action, song } = req.body || {};
 
@@ -168,7 +186,7 @@ app.post("/api/track", async (req, res) => {
     }
 });
 
-app.get("/api/recommendations", async (req, res) => {
+app.get("/api/recommendations", requireRecoApiKey, async (req, res) => {
     const { userId } = req.query || {};
     if (!userId) return res.status(400).json({ error: "userId required" });
 

@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { friendlyErrorMessage, logError } from '../utils/logger';
 
-const YT_API_BASE = 'https://music.devsyncapp.in/api/yt';
+import { API_BASE } from './apiBase';
+
+const YT_API_BASE = `${API_BASE}/yt`;
 
 const requestYoutube = async (tag, path, config, fallbackMessage) => {
   try {

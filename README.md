@@ -16,6 +16,22 @@ npm run server
 
 Default: `http://localhost:3001`
 
+## Frontend (Vite)
+
+Run the web app in dev mode (uses the proxy in `vite.config.js`):
+
+```bash
+npm run dev
+```
+
+### Env
+
+- `VITE_API_BASE` (optional)
+	- Default: `/api` (same origin)
+	- Set this at build-time when the frontend must call a different host, e.g. `VITE_API_BASE=https://music.example.com/api`
+- `RECO_API_KEY` (optional, server)
+	- When set, `/api/track` and `/api/recommendations` require either `x-api-key: <key>` or `Authorization: Bearer <key>`.
+
 ## Flutter (Android, Kotlin)
 
 This repo does not include a generated Flutter project by default. After installing Flutter, run:

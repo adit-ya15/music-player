@@ -15,7 +15,23 @@ export default defineConfig({
       '/api/yt': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-      }
+      },
+      '/api/track': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api/recommendations': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api/metrics': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     }
   }
 })

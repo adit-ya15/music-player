@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { friendlyErrorMessage, logError } from '../utils/logger';
 
-// Mobile app calls EC2 backend directly
-const SAAVN_API_BASE = 'https://music.devsyncapp.in/api/saavn';
+import { API_BASE } from './apiBase';
+
+const SAAVN_API_BASE = `${API_BASE}/saavn`;
 
 const requestSaavn = async (tag, path, config, fallbackMessage) => {
   try {

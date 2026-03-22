@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { friendlyErrorMessage, logError } from '../utils/logger';
 
-// Keep consistent with existing deployed API base.
-const API_BASE = 'https://music.devsyncapp.in/api';
+import { API_BASE } from './apiBase';
 
 const requestReco = async (tag, method, path, data, config, fallbackMessage) => {
   try {
