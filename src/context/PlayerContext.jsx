@@ -147,10 +147,12 @@ export const PlayerProvider = ({ children }) => {
         if (seq !== playSeqRef.current) return;
 
         if (!details?.streamUrl) {
-          throw new Error("Stream fetch failed");
+          // On native (ExoPlayer), never fall back to /pipe because it can serve non-media error/proxy bodies.
+          // Let the Saavn fallback (below) handle it.
+          streamUrl = null;
+        } else {
+          streamUrl = details.streamUrl;
         }
-
-        streamUrl = details.streamUrl;
       }
 
       if (seq !== playSeqRef.current) return;

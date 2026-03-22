@@ -65,7 +65,7 @@ export const youtubeApi = {
   },
 
   // preferDirect=true is best for native (ExoPlayer) because it avoids proxy/streaming edge-cases.
-  // We still fall back to /pipe for web playback or when /stream fails.
+  // Do NOT fall back to /pipe on native; if /stream fails, the caller should use Saavn fallback or show error.
   getStreamDetails: async (videoId, { preferDirect = false } = {}) => {
     const pipeUrl = `${YT_API_BASE}/pipe/${videoId}`;
 
@@ -77,7 +77,7 @@ export const youtubeApi = {
     const directUrl = result.ok ? result.data?.streamUrl : null;
     return {
       videoId,
-      streamUrl: directUrl || pipeUrl,
+      streamUrl: directUrl || null,
       pipeUrl,
       directUrl: directUrl || null,
     };
