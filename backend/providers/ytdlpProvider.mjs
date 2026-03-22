@@ -36,7 +36,8 @@ export function buildYtdlpArgs(videoId, options = {}) {
     jsRuntimeNode = false,
   } = options;
 
-  const args = ['-f', 'bestaudio', '--no-playlist'];
+  // Important: avoid reading machine/user-level yt-dlp config (it can force cookies).
+  const args = ['--ignore-config', '-f', 'bestaudio', '--no-playlist'];
 
   // Basic headers help reduce bot-gating, without requiring cookies.
   // (Do NOT add cookies here.)
