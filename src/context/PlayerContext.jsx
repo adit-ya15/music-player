@@ -13,6 +13,8 @@ import { registerPlugin } from "@capacitor/core";
 
 import { youtubeApi } from "../api/youtube";
 import { saavnApi } from "../api/saavn";
+import { recommendationsApi } from "../api/recommendations";
+import { getOrCreateUserId } from "../utils/userId";
 
 import {
   buildPlaybackSession,
@@ -95,6 +97,19 @@ export const PlayerProvider = ({ children }) => {
 
   /* -------------------------- PLAY TRACK -------------------------- */
 
+  const trySaavnFallback = useCallback(async (track) => {
+    if (!track?.title) return null;
+    const q = `${track.title} ${track.artist || ''}`.trim();
+    if (!q) return null;
+
+    const result = await saavnApi.searchSongsSafe(q, 5);
+    if (!result.ok || !Array.isArray(result.data) || result.data.length === 0) return null;
+
+    // Pick the first match. Keep existing track metadata to avoid queue/index churn.
+    const saavnTrack = saavnApi.formatTrack(result.data[0]);
+    return saavnTrack?.streamUrl || null;
+  }, []);
+
   const loadAndPlay = useCallback(async (track) => {
 
     if (!track) return;
@@ -116,7 +131,6 @@ export const PlayerProvider = ({ children }) => {
     setIsPlaying(false);
     setProgress(0);
     setDuration(0);
-    setCurrentTrack(track);
 
     try {
 
@@ -139,6 +153,19 @@ export const PlayerProvider = ({ children }) => {
 
       if (seq !== playSeqRef.current) return;
 
+      if (!streamUrl) {
+        // Try Saavn fallback for YouTube tracks
+        if (track.source === 'youtube') {
+          const saavnUrl = await trySaavnFallback(track);
+          if (seq !== playSeqRef.current) return;
+          if (saavnUrl) {
+            streamUrl = saavnUrl;
+          }
+        }
+
+        if (!streamUrl) throw new Error('Stream unavailable');
+      }
+
       await MusicPlayer.play({
         url: streamUrl,
         title: track.title,
@@ -148,14 +175,47 @@ export const PlayerProvider = ({ children }) => {
 
       if (seq !== playSeqRef.current) return;
 
+      setCurrentTrack(track);
       setIsPlaying(true);
+
+      // Track behavior (fire-and-forget)
+      try {
+        const userId = getOrCreateUserId();
+        await recommendationsApi.trackSafe({ userId, song: { ...track, streamUrl } , action: 'play' });
+      } catch {
+        // ignore
+      }
 
     } catch (error) {
 
       console.error("Playback error", error);
       if (seq !== playSeqRef.current) return;
+
+      // Retry with Saavn once if YouTube playback failed.
+      if (track?.source === 'youtube') {
+        try {
+          const saavnUrl = await trySaavnFallback(track);
+          if (seq !== playSeqRef.current) return;
+          if (saavnUrl) {
+            await MusicPlayer.play({
+              url: saavnUrl,
+              title: track.title,
+              artist: track.artist,
+              artwork: track.coverArt || FALLBACK_COVER
+            });
+            if (seq !== playSeqRef.current) return;
+            setCurrentTrack({ ...track, streamUrl: saavnUrl });
+            setIsPlaying(true);
+            setPlaybackError(null);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       setIsPlaying(false);
-      setPlaybackError("Playback failed");
+      setPlaybackError("Song not available");
 
     } finally {
 
@@ -165,7 +225,7 @@ export const PlayerProvider = ({ children }) => {
 
     }
 
-  }, []);
+  }, [trySaavnFallback]);
 
   /* -------------------------- PLAY SESSION -------------------------- */
 

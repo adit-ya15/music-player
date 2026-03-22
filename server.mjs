@@ -9,6 +9,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import rateLimit from "express-rate-limit";
+import timeout from "connect-timeout";
 
 import { createCache } from "./backend/cache/cache.mjs";
 import { resolveStreamUrl } from "./backend/resolver/streamResolver.mjs";
@@ -16,9 +17,30 @@ import { ytdlpQueue } from "./backend/queue/ytdlpQueue.mjs";
 import { buildYtdlpArgs } from "./backend/providers/ytdlpProvider.mjs";
 import { spawnWithTimeout } from "./backend/lib/spawnWithTimeout.mjs";
 import { logger } from "./backend/lib/logger.mjs";
+import { metrics } from "./backend/lib/metrics.mjs";
+import { getRecommendations, trackUserAction } from "./backend/reco/recommendations.mjs";
 
 const PORT = process.env.PORT || 3001;
 const app = express();
+
+// JSON body parsing (used by /api/track)
+app.use(express.json({ limit: "50kb" }));
+
+// basic health endpoint (deployment / load balancers)
+app.get("/health", (req, res) => {
+    res.json({ status: "ok" });
+});
+
+// request timeout (prevents long-hanging requests)
+const requestTimeout = process.env.REQUEST_TIMEOUT || "10s";
+app.use(timeout(requestTimeout));
+app.use((req, res, next) => {
+    if (req.timedout) {
+        if (!res.headersSent) res.status(503).json({ error: "Request timeout" });
+        return;
+    }
+    next();
+});
 
 const YT_DLP_BIN = process.env.YT_DLP_BIN || "yt-dlp";
 const YT_SOURCE_ADDRESS = process.env.YT_SOURCE_ADDRESS;
@@ -75,8 +97,9 @@ app.use((req, res, next) => {
 // rate limiting (basic protection)
 // ─────────────────────────────────────────────
 
-const windowMs = Math.max(1, Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000));
-const maxReq = Math.max(1, Number(process.env.RATE_LIMIT_MAX || 200));
+// Production default: 60 req/min per IP (override via env)
+const windowMs = Math.max(1, Number(process.env.RATE_LIMIT_WINDOW_MS || 60 * 1000));
+const maxReq = Math.max(1, Number(process.env.RATE_LIMIT_MAX || 60));
 
 app.use(
     "/api/",
@@ -116,6 +139,55 @@ app.use(
 // ─────────────────────────────────────────────
 // search songs
 // ─────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// user tracking + recommendations
+// ─────────────────────────────────────────────
+
+app.post("/api/track", async (req, res) => {
+    try {
+        const { userId, songId, artist, action, song } = req.body || {};
+
+        if (!userId || !action) {
+            return res.status(400).json({ error: "userId and action required" });
+        }
+
+        // Minimal song payload (prefer explicit 'song' from client).
+        const normalizedSong = song && typeof song === 'object'
+            ? song
+            : {
+                id: songId,
+                artist,
+            };
+
+        await trackUserAction({ userId, song: normalizedSong, action });
+        res.json({ ok: true });
+    } catch (err) {
+        logger.warn("reco", "track endpoint failed", { error: err?.message });
+        res.status(500).json({ error: "Internal error" });
+    }
+});
+
+app.get("/api/recommendations", async (req, res) => {
+    const { userId } = req.query || {};
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    try {
+        const innertube = await getYT();
+        const cache = await cachePromise;
+
+        const data = await getRecommendations({
+            userId: String(userId),
+            innertube,
+            cache,
+        });
+
+        res.json({ ok: true, ...data });
+    } catch (err) {
+        logger.warn("reco", "recommendations failed", { userId, error: err?.message });
+        res.status(500).json({ ok: false, error: "Recommendations unavailable" });
+    }
+});
 
 app.get("/api/yt/search", async (req, res) => {
     const { query, limit = 20 } = req.query;
@@ -497,6 +569,13 @@ app.get("/api/yt/health", (req, res) => {
             namespace: process.env.CACHE_NAMESPACE || "aura",
         },
         hasSession: !!yt,
+    });
+});
+
+app.get("/api/metrics", (req, res) => {
+    res.json({
+        status: "ok",
+        metrics: metrics.snapshot(),
     });
 });
 

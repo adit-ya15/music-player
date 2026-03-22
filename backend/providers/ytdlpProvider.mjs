@@ -55,7 +55,10 @@ export function buildYtdlpArgs(videoId, options = {}) {
 }
 
 export async function ytdlpGetUrl(bin, videoId, options = {}) {
-  const timeoutMs = Math.max(1000, Number(process.env.YTDLP_TIMEOUT_MS || 8000));
+  const timeoutMs = Math.max(
+    1000,
+    Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 8000)
+  );
   const args = buildYtdlpArgs(videoId, { ...options, getUrl: true });
 
   const { proc, done } = spawnWithTimeout(bin, args, { timeoutMs });

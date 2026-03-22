@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log*
+dist
+android
+.gradle-user
+null_app
+flutter-template
+.git
+.gitignore
+.vscode

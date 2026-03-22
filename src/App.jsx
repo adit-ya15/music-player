@@ -3,8 +3,10 @@ import { Play, User, Shuffle, ListPlus } from 'lucide-react';
 import { usePlayer } from './context/PlayerContext';
 import { saavnApi } from './api/saavn';
 import { youtubeApi } from './api/youtube';
+import { recommendationsApi } from './api/recommendations';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { buildHistory, insertTrackNext } from './utils/playerState';
+import { getOrCreateUserId } from './utils/userId';
 import Sidebar from './components/Sidebar';
 import SearchBar from './components/SearchBar';
 import TrackCard from './components/TrackCard';
@@ -39,6 +41,8 @@ function App() {
   const [discoverSections, setDiscoverSections] = useState([]);
   const [personalMix, setPersonalMix] = useState(null);
   const [dailyMix, setDailyMix] = useState(null);
+  const [madeForYou, setMadeForYou] = useState(null);
+  const [basedOnRecent, setBasedOnRecent] = useState(null);
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isTrendingLoading, setIsTrendingLoading] = useState(false);
@@ -178,12 +182,30 @@ function App() {
       }
 
       setDailyMix(dailyMixTracks.length ? { title: 'Daily Mix', tracks: dailyMixTracks } : null);
+
+      // Backend recommendations (cache-first)
+      try {
+        const userId = getOrCreateUserId();
+        const recoRes = await recommendationsApi.getRecommendationsSafe(userId);
+        if (recoRes.ok && recoRes.data) {
+          setMadeForYou(recoRes.data.madeForYou?.length ? { title: 'Made for you', tracks: recoRes.data.madeForYou } : null);
+          setBasedOnRecent(recoRes.data.basedOnRecent?.length ? { title: 'Based on your recent plays', tracks: recoRes.data.basedOnRecent } : null);
+        } else {
+          setMadeForYou(null);
+          setBasedOnRecent(null);
+        }
+      } catch {
+        setMadeForYou(null);
+        setBasedOnRecent(null);
+      }
     } catch (error) {
       logError('app.loadDiscover', error);
       setDiscoverError('Discover is unavailable right now.');
       setDiscoverSections([]);
       setPersonalMix(null);
       setDailyMix(null);
+      setMadeForYou(null);
+      setBasedOnRecent(null);
     } finally {
       setIsDiscoverLoading(false);
     }
@@ -478,6 +500,50 @@ function App() {
                           key={track.id + index}
                           track={track}
                           trackList={dailyMix.tracks}
+                          playMode="list"
+                          isFavorite={favorites.some((favoriteTrack) => favoriteTrack.id === track.id)}
+                          onToggleFavorite={toggleFavorite}
+                          onContextMenu={handleTrackContextMenu}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {madeForYou && (
+                  <section className="track-section">
+                    <div className="section-header">
+                      <h2>{madeForYou.title}</h2>
+                    </div>
+                    <div className="track-grid">
+                      {madeForYou.tracks.map((track, index) => (
+                        <TrackCard
+                          key={track.id + index}
+                          track={track}
+                          trackList={madeForYou.tracks}
+                          playMode="list"
+                          isFavorite={favorites.some((favoriteTrack) => favoriteTrack.id === track.id)}
+                          onToggleFavorite={toggleFavorite}
+                          onContextMenu={handleTrackContextMenu}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {basedOnRecent && (
+                  <section className="track-section">
+                    <div className="section-header">
+                      <h2>{basedOnRecent.title}</h2>
+                    </div>
+                    <div className="track-grid">
+                      {basedOnRecent.tracks.map((track, index) => (
+                        <TrackCard
+                          key={track.id + index}
+                          track={track}
+                          trackList={basedOnRecent.tracks}
                           playMode="list"
                           isFavorite={favorites.some((favoriteTrack) => favoriteTrack.id === track.id)}
                           onToggleFavorite={toggleFavorite}
