@@ -31,6 +31,8 @@ npm run dev
 	- Set this at build-time when the frontend must call a different host, e.g. `VITE_API_BASE=https://music.example.com/api`
 - `RECO_API_KEY` (optional, server)
 	- When set, `/api/track` and `/api/recommendations` require either `x-api-key: <key>` or `Authorization: Bearer <key>`.
+- `RECO_INCLUDE_SCORES` (optional, server)
+	- When set (e.g. `true`), includes a numeric `score` field in recommendation items for debugging.
 
 ## Flutter (Android, Kotlin)
 
