@@ -1,16 +1,40 @@
-# React + Vite
+# Aura Music / Null
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repo contains:
 
-Currently, two official plugins are available:
+- A Node.js backend (`server.mjs`) that provides YouTube Music search + streaming endpoints.
+- A Flutter (Android/Kotlin) app template under `flutter-template/`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Backend
 
-## React Compiler
+Run the API server:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run server
+```
 
-## Expanding the ESLint configuration
+Default: `http://localhost:3001`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Flutter (Android, Kotlin)
+
+This repo does not include a generated Flutter project by default. After installing Flutter, run:
+
+```powershell
+./scripts/setup-flutter-null.ps1
+```
+
+That will create `null_app/` (Android + Kotlin), copy the UI from `flutter-template/`, and apply the launcher icon resources.
+
+Run on Android emulator (backend on your PC):
+
+```powershell
+cd null_app
+flutter run --dart-define=AURA_BASE_URL=http://10.0.2.2:3001
+```
+
+Run on a real device (replace with your PC IP):
+
+```powershell
+flutter run --dart-define=AURA_BASE_URL=http://192.168.x.x:3001
+```

@@ -17,9 +17,13 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 
 const YT_DLP_BIN = process.env.YT_DLP_BIN || "yt-dlp";
-const YT_COOKIES_FILE = process.env.YT_COOKIES_FILE;
 const YT_SOURCE_ADDRESS = process.env.YT_SOURCE_ADDRESS;
 const YT_EXTRACTOR_ARGS = process.env.YT_EXTRACTOR_ARGS || "";
+
+// Cookies are intentionally disabled (yt-dlp runs without cookies).
+if (process.env.YT_COOKIES_FILE) {
+    console.warn("[config] Ignoring YT_COOKIES_FILE: cookies are disabled in this backend");
+}
 
 // resolve dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -266,7 +270,6 @@ function ytDlpBaseArgs(videoId, { playerClient } = {}) {
     const client = playerClient || "android_vr";
     args.push("--extractor-args", `youtube:player_client=${client}`);
     if (YT_EXTRACTOR_ARGS) args.push("--extractor-args", YT_EXTRACTOR_ARGS);
-    if (YT_COOKIES_FILE) args.push("--cookies", YT_COOKIES_FILE);
     if (YT_SOURCE_ADDRESS) args.push("--source-address", YT_SOURCE_ADDRESS);
     args.push(`https://music.youtube.com/watch?v=${videoId}`);
     return args;
@@ -293,7 +296,6 @@ async function getStreamUrl(videoId) {
         // Fallback: default client with JS runtime
         console.warn(`[stream] android_vr failed for ${videoId}: ${err.message}, trying default client…`);
         const args2 = ["-f", "bestaudio", "--js-runtimes", "node", "--get-url"];
-        if (YT_COOKIES_FILE) args2.push("--cookies", YT_COOKIES_FILE);
         if (YT_SOURCE_ADDRESS) args2.push("--source-address", YT_SOURCE_ADDRESS);
         args2.push(`https://music.youtube.com/watch?v=${videoId}`);
         const { stdout } = await execFileAsync(YT_DLP_BIN, args2, { timeout: 30000 });
