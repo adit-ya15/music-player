@@ -17,4 +17,7 @@ export const logger = {
   error(tag, message, meta) {
     console.error(`[Aura][${tag}] ${message}${fmtMeta(meta)}`);
   },
+  debug(tag, message, meta) {
+    console.debug(`[Aura][${tag}] ${message}${fmtMeta(meta)}`);
+  }
 };
