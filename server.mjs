@@ -24,6 +24,23 @@ import { getRecommendations, trackUserAction } from "./backend/reco/recommendati
 const PORT = process.env.PORT || 3001;
 const app = express();
 
+// If this server is behind a reverse proxy (Nginx/Cloudflare/Traefik), Express must
+// trust the proxy in order to correctly interpret `X-Forwarded-For` and avoid
+// express-rate-limit's proxy safety checks.
+//
+// - Set `TRUST_PROXY=1` (single proxy hop) or `TRUST_PROXY=true` (any number)
+// - If unset, we default to 1 in production for typical deployments.
+const TRUST_PROXY_RAW = (process.env.TRUST_PROXY ?? '').toString().trim();
+if (TRUST_PROXY_RAW) {
+    const v = TRUST_PROXY_RAW.toLowerCase();
+    if (v === 'true') app.set('trust proxy', true);
+    else if (v === 'false') app.set('trust proxy', false);
+    else if (!Number.isNaN(Number(v))) app.set('trust proxy', Number(v));
+    else app.set('trust proxy', TRUST_PROXY_RAW);
+} else if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
+    app.set('trust proxy', 1);
+}
+
 // JSON body parsing (used by /api/track)
 app.use(express.json({ limit: "50kb" }));
 
@@ -65,9 +82,10 @@ function requireRecoApiKey(req, res, next) {
     return next();
 }
 
-// Cookies are intentionally disabled (yt-dlp runs without cookies).
+// Optional yt-dlp cookies for sign-in/age-gated content.
+// If provided, `backend/providers/ytdlpProvider.mjs` will add `--cookies <file>`.
 if (process.env.YT_COOKIES_FILE) {
-    logger.warn("config", "Ignoring YT_COOKIES_FILE: cookies are disabled in this backend");
+    logger.info("config", "Using YT_COOKIES_FILE for yt-dlp", { file: process.env.YT_COOKIES_FILE });
 }
 
 // resolve dirname
@@ -142,6 +160,11 @@ app.use(
         max: maxReq,
         standardHeaders: true,
         legacyHeaders: false,
+        // If `trust proxy` isn't enabled, a reverse proxy may still add X-Forwarded-For.
+        // Disable the strict header validation in that case to prevent a hard crash.
+        validate: {
+            xForwardedForHeader: !!app.get('trust proxy'),
+        },
     })
 );
 

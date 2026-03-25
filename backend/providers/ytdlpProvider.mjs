@@ -31,12 +31,16 @@ export function buildYtdlpArgs(videoId, options = {}) {
     extractorArgs = process.env.YT_EXTRACTOR_ARGS || '',
     sourceAddress = process.env.YT_SOURCE_ADDRESS,
     playerClient = process.env.YT_PLAYER_CLIENTS || 'android_vr',
+    cookiesFile = process.env.YT_COOKIES_FILE,
     getUrl = false,
     outputToStdout = false,
   } = options;
 
   // Important: avoid reading machine/user-level yt-dlp config (it can force cookies).
   const args = ['--ignore-config', '-f', 'bestaudio', '--no-playlist'];
+
+  // Optional explicit cookies file (helps with sign-in / age-gated videos).
+  if (cookiesFile) args.push('--cookies', cookiesFile);
 
   // Basic headers help reduce bot-gating, without requiring cookies.
   // (Do NOT add cookies here.)
