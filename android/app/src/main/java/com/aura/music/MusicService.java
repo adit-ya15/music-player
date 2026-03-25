@@ -5,7 +5,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -25,6 +29,11 @@ import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 import com.google.android.exoplayer2.util.MimeTypes;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+
 public class MusicService extends Service {
 
     public static final String ACTION_PLAY = "com.aura.music.ACTION_PLAY";
@@ -33,6 +42,7 @@ public class MusicService extends Service {
     public static final String ACTION_NEXT = "com.aura.music.ACTION_NEXT";
     public static final String ACTION_PREV = "com.aura.music.ACTION_PREV";
     public static final String ACTION_SEEK = "com.aura.music.ACTION_SEEK";
+    public static final String ACTION_SET_QUEUE = "com.aura.music.ACTION_SET_QUEUE";
 
     public static final String ACTION_PLAYBACK_ERROR = "com.aura.music.PLAYBACK_ERROR";
     
@@ -46,6 +56,54 @@ public class MusicService extends Service {
     private String currentTitle = "Aura Music";
     private String currentArtist = "Unknown Artist";
     private String currentArtwork = "";
+
+    /* ── Native track queue for background autoplay ── */
+    private final ArrayList<QueueItem> trackQueue = new ArrayList<>();
+    private int currentQueueIndex = -1;
+
+    /* ── Audio focus ── */
+    private AudioManager audioManager;
+    private AudioFocusRequest audioFocusRequest;
+    private boolean playOnFocusGain = false;
+
+    private final AudioManager.OnAudioFocusChangeListener focusChangeListener = focusChange -> {
+        switch (focusChange) {
+            case AudioManager.AUDIOFOCUS_LOSS:
+                // Permanent loss — another app took focus
+                if (player != null) player.pause();
+                playOnFocusGain = false;
+                updateNotification();
+                updatePlaybackState();
+                sendExplicitBroadcast("com.aura.music.STATUS_UPDATE_PAUSED");
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                // Temporary loss — phone call, notification sound, etc.
+                if (player != null && player.isPlaying()) {
+                    player.pause();
+                    playOnFocusGain = true;
+                    updateNotification();
+                    updatePlaybackState();
+                }
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+                // Can duck — lower volume briefly
+                if (player != null) player.setVolume(0.3f);
+                break;
+            case AudioManager.AUDIOFOCUS_GAIN:
+                // Regained focus
+                if (player != null) {
+                    player.setVolume(1.0f);
+                    if (playOnFocusGain) {
+                        player.play();
+                        playOnFocusGain = false;
+                        updateNotification();
+                        updatePlaybackState();
+                    }
+                }
+                break;
+        }
+    };
+
     private final Handler handler = new Handler();
     private final Runnable statusRunnable = new Runnable() {
         @Override
@@ -77,13 +135,23 @@ public class MusicService extends Service {
         super.onCreate();
         createNotificationChannel();
 
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
             .setUserAgent(HTTP_UA)
             .setAllowCrossProtocolRedirects(true);
 
+        // Set audio attributes for media playback
+        com.google.android.exoplayer2.audio.AudioAttributes exoAudioAttributes =
+            new com.google.android.exoplayer2.audio.AudioAttributes.Builder()
+                .setUsage(com.google.android.exoplayer2.C.USAGE_MEDIA)
+                .setContentType(com.google.android.exoplayer2.C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build();
+
         player = new ExoPlayer.Builder(this)
             .setMediaSourceFactory(new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory))
             .build();
+        player.setAudioAttributes(exoAudioAttributes, false); // false = we manage audio focus ourselves
         player.addListener(new Player.Listener() {
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
@@ -93,7 +161,11 @@ public class MusicService extends Service {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_ENDED) {
-                    sendExplicitBroadcast("com.aura.music.TRACK_ENDED");
+                    // Try to play next track from native queue first (background autoplay)
+                    if (!playNextFromQueue()) {
+                        // No more tracks in queue — notify JS
+                        sendExplicitBroadcast("com.aura.music.TRACK_ENDED");
+                    }
                 }
             }
 
@@ -112,9 +184,7 @@ public class MusicService extends Service {
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override
             public void onPlay() {
-                player.play();
-                updateNotification();
-                updatePlaybackState();
+                requestAudioFocusAndPlay();
             }
             @Override
             public void onPause() {
@@ -123,9 +193,9 @@ public class MusicService extends Service {
                 updatePlaybackState();
             }
             @Override
-            public void onSkipToNext() { sendExplicitBroadcast("com.aura.music.SKIP_NEXT"); }
+            public void onSkipToNext() { handleSkipNext(); }
             @Override
-            public void onSkipToPrevious() { sendExplicitBroadcast("com.aura.music.SKIP_PREV"); }
+            public void onSkipToPrevious() { handleSkipPrev(); }
             @Override
             public void onSeekTo(long pos) { player.seekTo(pos); }
         });
@@ -147,25 +217,145 @@ public class MusicService extends Service {
                     break;
                 case ACTION_PAUSE:
                     player.pause();
+                    updateNotification();
+                    updatePlaybackState();
                     break;
                 case ACTION_RESUME:
-                    player.play();
+                    requestAudioFocusAndPlay();
                     break;
                 case ACTION_NEXT:
                     android.util.Log.d("MusicService", "ACTION_NEXT triggered");
-                    sendExplicitBroadcast("com.aura.music.SKIP_NEXT");
+                    handleSkipNext();
                     break;
                 case ACTION_PREV:
                     android.util.Log.d("MusicService", "ACTION_PREV triggered");
-                    sendExplicitBroadcast("com.aura.music.SKIP_PREV");
+                    handleSkipPrev();
                     break;
                 case ACTION_SEEK:
                     player.seekTo(intent.getLongExtra("position", 0));
+                    break;
+                case ACTION_SET_QUEUE:
+                    handleSetQueue(intent);
                     break;
             }
         }
         startForeground(NOTIFICATION_ID, createNotification());
         return START_STICKY;
+    }
+
+    /* ── Audio focus ── */
+    private void requestAudioFocusAndPlay() {
+        if (audioManager == null) {
+            player.play();
+            updateNotification();
+            updatePlaybackState();
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (audioFocusRequest == null) {
+                AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build();
+                audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setOnAudioFocusChangeListener(focusChangeListener)
+                    .setWillPauseWhenDucked(false)
+                    .build();
+            }
+            int result = audioManager.requestAudioFocus(audioFocusRequest);
+            if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                player.play();
+                updateNotification();
+                updatePlaybackState();
+            }
+        } else {
+            @SuppressWarnings("deprecation")
+            int result = audioManager.requestAudioFocus(focusChangeListener,
+                AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+            if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                player.play();
+                updateNotification();
+                updatePlaybackState();
+            }
+        }
+    }
+
+    /* ── Native queue management ── */
+    private void handleSetQueue(Intent intent) {
+        String json = intent.getStringExtra("queue");
+        int index = intent.getIntExtra("currentIndex", -1);
+        if (json == null) return;
+
+        try {
+            JSONArray arr = new JSONArray(json);
+            trackQueue.clear();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                trackQueue.add(new QueueItem(
+                    obj.optString("url", ""),
+                    obj.optString("title", "Unknown"),
+                    obj.optString("artist", "Unknown"),
+                    obj.optString("artwork", "")
+                ));
+            }
+            currentQueueIndex = index;
+            android.util.Log.d("MusicService", "Queue set: " + trackQueue.size() + " tracks, index=" + index);
+        } catch (Exception e) {
+            android.util.Log.e("MusicService", "Failed to parse queue JSON", e);
+        }
+    }
+
+    private void handleSkipNext() {
+        if (playNextFromQueue()) return;
+        // Fallback: notify JS to handle (when WebView is active)
+        sendExplicitBroadcast("com.aura.music.SKIP_NEXT");
+    }
+
+    private void handleSkipPrev() {
+        if (playPrevFromQueue()) return;
+        // Fallback: notify JS
+        sendExplicitBroadcast("com.aura.music.SKIP_PREV");
+    }
+
+    private boolean playNextFromQueue() {
+        int nextIdx = currentQueueIndex + 1;
+        if (nextIdx >= 0 && nextIdx < trackQueue.size()) {
+            currentQueueIndex = nextIdx;
+            QueueItem item = trackQueue.get(nextIdx);
+            if (item.url != null && !item.url.isEmpty()) {
+                currentTitle = item.title;
+                currentArtist = item.artist;
+                currentArtwork = item.artwork;
+                playTrack(item.url);
+                // Notify JS about the change so UI can sync
+                Intent syncIntent = new Intent("com.aura.music.QUEUE_INDEX_CHANGED");
+                syncIntent.putExtra("index", nextIdx);
+                sendExplicitBroadcast(syncIntent);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean playPrevFromQueue() {
+        int prevIdx = currentQueueIndex - 1;
+        if (prevIdx >= 0 && prevIdx < trackQueue.size()) {
+            currentQueueIndex = prevIdx;
+            QueueItem item = trackQueue.get(prevIdx);
+            if (item.url != null && !item.url.isEmpty()) {
+                currentTitle = item.title;
+                currentArtist = item.artist;
+                currentArtwork = item.artwork;
+                playTrack(item.url);
+                Intent syncIntent = new Intent("com.aura.music.QUEUE_INDEX_CHANGED");
+                syncIntent.putExtra("index", prevIdx);
+                sendExplicitBroadcast(syncIntent);
+                return true;
+            }
+        }
+        return false;
     }
 
     private void updatePlaybackState() {
@@ -233,7 +423,6 @@ public class MusicService extends Service {
         android.util.Log.d("MusicService", "playTrack url=" + url);
 
         MediaItem.Builder builder = new MediaItem.Builder().setUri(url);
-        // Hint mime types for our known endpoints to help extractor selection.
         if (url != null) {
             if (url.contains("/api/yt/pipe/")) {
                 builder.setMimeType(MimeTypes.AUDIO_WEBM);
@@ -247,8 +436,7 @@ public class MusicService extends Service {
         MediaItem item = builder.build();
         player.setMediaItem(item);
         player.prepare();
-        player.play();
-        updateNotification();
+        requestAudioFocusAndPlay();
     }
 
     @Override
@@ -256,6 +444,9 @@ public class MusicService extends Service {
         if (player != null) player.release();
         if (mediaSession != null) mediaSession.release();
         handler.removeCallbacks(statusRunnable);
+        if (audioManager != null && audioFocusRequest != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest);
+        }
         super.onDestroy();
     }
 
@@ -269,6 +460,21 @@ public class MusicService extends Service {
                     CHANNEL_ID, "Music Playback", NotificationManager.IMPORTANCE_LOW);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.createNotificationChannel(serviceChannel);
+        }
+    }
+
+    /* ── Queue item data class ── */
+    private static class QueueItem {
+        final String url;
+        final String title;
+        final String artist;
+        final String artwork;
+
+        QueueItem(String url, String title, String artist, String artwork) {
+            this.url = url;
+            this.title = title;
+            this.artist = artist;
+            this.artwork = artwork;
         }
     }
 }

@@ -4,6 +4,8 @@ import { withTimeout } from '../lib/withTimeout.mjs';
 import { dedupe } from '../lib/dedupe.mjs';
 import { metrics } from '../lib/metrics.mjs';
 import { youtubeiGetAudioUrl } from '../providers/youtubeiProvider.mjs';
+import { pipedGetAudioUrl } from '../providers/pipedProvider.mjs';
+import { soundcloudGetAudioUrl } from '../providers/soundcloudProvider.mjs';
 import { ytdlpGetUrl } from '../providers/ytdlpProvider.mjs';
 import { ytdlpQueue } from '../queue/ytdlpQueue.mjs';
 import { isStreamAlive } from '../utils/validateStream.mjs';
@@ -29,6 +31,8 @@ export async function resolveStreamUrl({
   ytdlpBin,
   cache,
   videoId,
+  title,
+  artist
 }) {
   const key = streamKey(videoId);
 
@@ -55,7 +59,21 @@ export async function resolveStreamUrl({
       return url;
     };
 
-    // 3) yt-dlp fallback (queued + retried) + validation + circuit breaker
+    // 3) Piped API secondary (fast HTTP fallback to open YouTube frontends)
+    const secondary = async () => {
+      const url = await pipedGetAudioUrl(videoId);
+      if (!url) return null;
+      return url;
+    };
+
+    // 4) SoundCloud API tertiary (cross-platform search for same artist/title)
+    const tertiary = async () => {
+      const url = await soundcloudGetAudioUrl(videoId, title, artist);
+      if (!url) return null;
+      return url;
+    };
+
+    // 5) yt-dlp fallback (queued + retried) + validation + circuit breaker
     const guardedFallback = async () => {
       if (!ytdlpBin) return null;
       if (ytdlpFailureCount > YTDLP_CB_THRESHOLD) {
@@ -108,6 +126,36 @@ export async function resolveStreamUrl({
 
     if (url) {
       metrics.increment('resolver.primary.success');
+    }
+
+    if (!url) {
+      try {
+        url = await withTimeout(
+          retry(secondary, 2, {
+            delayMs: 150,
+            onError: (err) => logger.warn('resolver', 'piped api attempt failed', { videoId, error: err?.message }),
+          }),
+          PRIMARY_TIMEOUT_MS
+        );
+      } catch {
+        // ignore
+      }
+      if (url) metrics.increment('resolver.secondary.success');
+    }
+
+    if (!url && title) {
+      try {
+        url = await withTimeout(
+          retry(tertiary, 1, {
+            delayMs: 0,
+            onError: (err) => logger.warn('resolver', 'soundcloud attempt failed', { videoId, error: err?.message }),
+          }),
+          PRIMARY_TIMEOUT_MS
+        );
+      } catch {
+        // ignore
+      }
+      if (url) metrics.increment('resolver.tertiary.success');
     }
 
     if (!url) {

@@ -11,8 +11,9 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 import rateLimit from "express-rate-limit";
 import timeout from "connect-timeout";
 
-import { createCache } from "./backend/cache/cache.mjs";
+
 import { resolveStreamUrl } from "./backend/resolver/streamResolver.mjs";
+import { downloadToCache, getCachedFilePath } from "./backend/cache/audioCache.mjs";
 import { ytdlpQueue } from "./backend/queue/ytdlpQueue.mjs";
 import { buildYtdlpArgs } from "./backend/providers/ytdlpProvider.mjs";
 import { spawnWithTimeout } from "./backend/lib/spawnWithTimeout.mjs";
@@ -112,6 +113,21 @@ app.use((req, res, next) => {
 });
 
 // ─────────────────────────────────────────────
+// saavn proxy (placed BEFORE rate limiter so fallback requests aren't throttled)
+// ─────────────────────────────────────────────
+
+app.use(
+    "/api/saavn",
+    createProxyMiddleware({
+        target: "https://saavn.sumit.co",
+        changeOrigin: true,
+        // Express strips the mount path (`/api/saavn`) before proxying,
+        // so we must prepend `/api` for the upstream Saavn API.
+        pathRewrite: (path) => `/api${path}`
+    })
+);
+
+// ─────────────────────────────────────────────
 // rate limiting (basic protection)
 // ─────────────────────────────────────────────
 
@@ -138,21 +154,6 @@ app.use((req, res, next) => {
     });
     next();
 });
-
-// ─────────────────────────────────────────────
-// saavn proxy
-// ─────────────────────────────────────────────
-
-app.use(
-    "/api/saavn",
-    createProxyMiddleware({
-        target: "https://saavn.sumit.co",
-        changeOrigin: true,
-        // Express strips the mount path (`/api/saavn`) before proxying,
-        // so we must prepend `/api` for the upstream Saavn API.
-        pathRewrite: (path) => `/api${path}`
-    })
-);
 
 // ─────────────────────────────────────────────
 // search songs
@@ -258,14 +259,6 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
         const innertube = await getYT();
         const cache = await cachePromise;
 
-        const streamUrl = await resolveStreamUrl({
-            innertube,
-            ytdlpBin: YT_DLP_BIN,
-            cache,
-            videoId,
-        });
-
-        // Fetch metadata from youtubei.js (still works for info, just not stream URLs)
         let title, author, duration, thumbnail;
         try {
             const info = await innertube.music.getInfo(videoId);
@@ -273,7 +266,28 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
             author = info.basic_info?.author;
             duration = info.basic_info?.duration;
             thumbnail = info.basic_info?.thumbnail?.[0]?.url;
-        } catch { /* metadata is optional */ }
+        } catch { /* metadata is optional but needed for soundcloud fallback */ }
+
+        let streamUrl = null;
+        const cachedPath = getCachedFilePath(videoId);
+        
+        if (cachedPath) {
+            // Serve from our reliable disk cache
+            streamUrl = `${req.protocol}://${req.get('host')}/api/yt/cache/${videoId}`;
+            logger.info("stream", "Serving from local disk cache", { videoId });
+        } else {
+            // Not cached locally yet. Resolve direct URL for instant playback...
+            streamUrl = await resolveStreamUrl({
+                innertube,
+                ytdlpBin: YT_DLP_BIN,
+                cache,
+                videoId,
+                title,
+                artist: author
+            });
+            // ...and spawn the background downloader for next time!
+            downloadToCache(videoId, YT_DLP_BIN);
+        }
 
         const responseData = {
             videoId,
@@ -288,6 +302,21 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
     } catch (err) {
         logger.error("stream", "Stream error", { videoId, error: err?.message });
         res.status(500).json({ streamUrl: null, error: "Stream unavailable" });
+    }
+});
+
+// ─────────────────────────────────────────────
+// local disk cache static server
+// ─────────────────────────────────────────────
+
+app.get("/api/yt/cache/:videoId", (req, res) => {
+    const { videoId } = req.params;
+    const cachedPath = getCachedFilePath(videoId);
+    if (cachedPath) {
+        res.setHeader("Content-Type", "audio/mp4");
+        res.sendFile(cachedPath);
+    } else {
+        res.status(404).send("Not found in cache");
     }
 });
 

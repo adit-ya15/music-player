@@ -10,6 +10,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
+
 @CapacitorPlugin(name = "MusicPlayer")
 public class MusicPlugin extends Plugin {
 
@@ -40,6 +42,9 @@ public class MusicPlugin extends Plugin {
                     ret.put("position", intent.getDoubleExtra("position", 0));
                     ret.put("duration", intent.getDoubleExtra("duration", 0));
                     notifyListeners("statusUpdate", ret);
+                } else if (action.equals("com.aura.music.QUEUE_INDEX_CHANGED")) {
+                    ret.put("index", intent.getIntExtra("index", -1));
+                    notifyListeners("queueIndexChanged", ret);
                 }
             }
         };
@@ -50,6 +55,7 @@ public class MusicPlugin extends Plugin {
         filter.addAction("com.aura.music.TRACK_ENDED");
         filter.addAction(MusicService.ACTION_PLAYBACK_ERROR);
         filter.addAction("com.aura.music.STATUS_UPDATE");
+        filter.addAction("com.aura.music.QUEUE_INDEX_CHANGED");
         
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             getContext().registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
@@ -106,5 +112,24 @@ public class MusicPlugin extends Plugin {
             getContext().startService(intent);
         }
         call.resolve();
+    }
+
+    @PluginMethod
+    public void setQueue(PluginCall call) {
+        try {
+            JSObject data = call.getData();
+            JSONArray tracks = data.getJSONArray("tracks");
+            int currentIndex = data.optInt("currentIndex", -1);
+
+            Intent intent = new Intent(getContext(), MusicService.class);
+            intent.setAction(MusicService.ACTION_SET_QUEUE);
+            intent.putExtra("queue", tracks.toString());
+            intent.putExtra("currentIndex", currentIndex);
+            getContext().startService(intent);
+            call.resolve();
+        } catch (Exception e) {
+            android.util.Log.e("MusicPlugin", "setQueue error", e);
+            call.reject("Failed to set queue: " + e.getMessage());
+        }
     }
 }

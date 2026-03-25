@@ -97,6 +97,10 @@ export const PlayerProvider = ({ children }) => {
   const queueIndexRef = useRef(queueIndex);
   const playSeqRef = useRef(0);
 
+  /* ── Gapless playback: pre-resolve next track URL ── */
+  const preResolvedRef = useRef({ trackId: null, url: null, resolving: false });
+  const preloadAudioRef = useRef(null);
+
   const getRecommendationSnapshot = useCallback(async () => {
     const userId = getOrCreateUserId();
     const now = Date.now();
@@ -127,13 +131,56 @@ export const PlayerProvider = ({ children }) => {
     const q = `${track.title} ${track.artist || ''}`.trim();
     if (!q) return null;
 
-    const result = await saavnApi.searchSongsSafe(q, 5);
+    // Attempt 1
+    let result = await saavnApi.searchSongsSafe(q, 5);
+    // If rate-limited or failed, retry once after 2s backoff
+    if (!result.ok || !Array.isArray(result.data) || result.data.length === 0) {
+      await new Promise((r) => setTimeout(r, 2000));
+      result = await saavnApi.searchSongsSafe(q, 5);
+    }
     if (!result.ok || !Array.isArray(result.data) || result.data.length === 0) return null;
 
-    // Pick the first match. Keep existing track metadata to avoid queue/index churn.
     const saavnTrack = saavnApi.formatTrack(result.data[0]);
     return saavnTrack?.streamUrl || null;
   }, []);
+
+  /** Pre-resolve stream URL for a track (used for gapless preloading). */
+  const preResolveStream = useCallback(async (track) => {
+    if (!track) return;
+    const trackId = track.id;
+    if (preResolvedRef.current.trackId === trackId) return; // already resolved/resolving
+    preResolvedRef.current = { trackId, url: null, resolving: true };
+
+    try {
+      let url = track.streamUrl;
+      if (track.source === 'youtube') {
+        const videoId = track.videoId || track.id.replace(/^yt-/, '');
+        const details = await youtubeApi.getStreamDetails(videoId, { preferDirect: Capacitor.isNativePlatform() });
+        url = details?.streamUrl || null;
+      }
+      if (!url && track.source === 'youtube') {
+        const saavnUrl = await trySaavnFallback(track);
+        if (saavnUrl) url = saavnUrl;
+      }
+      if (url) {
+        preResolvedRef.current = { trackId, url, resolving: false };
+        // Preload audio on web for instant start
+        if (!Capacitor.isNativePlatform()) {
+          try {
+            if (preloadAudioRef.current) { preloadAudioRef.current.src = ''; }
+            const audio = new Audio();
+            audio.preload = 'auto';
+            audio.src = url;
+            preloadAudioRef.current = audio;
+          } catch { /* ignore */ }
+        }
+      } else {
+        preResolvedRef.current = { trackId: null, url: null, resolving: false };
+      }
+    } catch {
+      preResolvedRef.current = { trackId: null, url: null, resolving: false };
+    }
+  }, [trySaavnFallback]);
 
   const loadAndPlay = useCallback(async (track) => {
 
@@ -145,7 +192,6 @@ export const PlayerProvider = ({ children }) => {
     setPlaybackError(null);
 
     try {
-      // Stop current playback to avoid UI/audio desync while loading a new track.
       await MusicPlayer.pause();
     } catch {
       // ignore (web/no plugin)
@@ -159,7 +205,14 @@ export const PlayerProvider = ({ children }) => {
 
     try {
 
-      let streamUrl = track.streamUrl;
+      // Check if we have a pre-resolved URL for this track (gapless)
+      let streamUrl = null;
+      if (preResolvedRef.current.trackId === track.id && preResolvedRef.current.url) {
+        streamUrl = preResolvedRef.current.url;
+        preResolvedRef.current = { trackId: null, url: null, resolving: false };
+      } else {
+        streamUrl = track.streamUrl;
+      }
 
       if (track.source === "youtube") {
         const videoId = track.videoId || track.id.replace(/^yt-/, "");
@@ -739,6 +792,20 @@ export const PlayerProvider = ({ children }) => {
           setIsLoading(false);
           setPlaybackError(msg || 'Song not available');
         });
+
+        // Sync state when native background player auto-plays next track
+        MusicPlayer.addListener('queueIndexChanged', (data) => {
+          const newIdx = data.index;
+          if (newIdx >= 0 && newIdx < queueRef.current.length) {
+            queueIndexRef.current = newIdx;
+            setQueueIndex(newIdx);
+            const track = queueRef.current[newIdx];
+            setCurrentTrack(track);
+            currentTrackRef.current = track;
+            setIsPlaying(true);
+            setProgress(0);
+          }
+        });
       } catch {
         // MusicPlayer plugin not available on web — ignore
       }
@@ -768,6 +835,51 @@ export const PlayerProvider = ({ children }) => {
       }
     }
   }, [queueIndex, queue, autoRadioEnabled, currentTrack, fetchRecommendations]);
+
+  /* ----------- GAPLESS: Pre-resolve next track URL at 75% progress ----------- */
+
+  useEffect(() => {
+    if (!duration || duration <= 0 || !isPlaying) return;
+    const pct = progress / duration;
+    if (pct < 0.75 || pct > 0.98) return; // trigger window: 75–98%
+
+    const nextIdx = queueIndexRef.current + 1;
+    const q = queueRef.current;
+    if (nextIdx >= q.length) return; // no next track
+
+    const nextTrack = q[nextIdx];
+    if (!nextTrack || preResolvedRef.current.trackId === nextTrack.id) return;
+
+    preResolveStream(nextTrack);
+  }, [progress, duration, isPlaying, preResolveStream]);
+
+  /* ----------- NATIVE: Sync queue to native for background autoplay ----------- */
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    
+    // We only send the upcoming tracks that we have URLs for, to avoid pushing the whole queue
+    // Native service just needs the next few tracks to autoplay smoothly
+    const q = queue;
+    const idx = queueIndex;
+    
+    const nativeQueue = q.slice(idx, idx + 5).map(t => {
+      let url = t.streamUrl || '';
+      if (preResolvedRef.current.trackId === t.id && preResolvedRef.current.url) {
+        url = preResolvedRef.current.url;
+      }
+      return {
+        url,
+        title: t.title,
+        artist: t.artist,
+        artwork: t.coverArt || ''
+      };
+    });
+
+    try {
+      MusicPlayer.setQueue({ tracks: nativeQueue, currentIndex: 0 });
+    } catch { /* ignore */ }
+  }, [queue, queueIndex, preResolvedRef.current.url]);
 
   /* -------------------------- CONTEXT VALUE -------------------------- */
 
