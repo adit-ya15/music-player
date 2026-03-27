@@ -27,7 +27,7 @@ function streamKey(videoId) {
   return `${CACHE_NAMESPACE}:stream:${videoId}`;
 }
 
-export async function resolveStreamUrl({
+async function resolveStreamWithMetaInternal({
   innertube,
   ytdlpBin,
   cache,
@@ -44,7 +44,7 @@ export async function resolveStreamUrl({
       const ok = await withTimeout(isStreamAlive(cached), VALIDATION_TIMEOUT_MS).catch(() => false);
       if (ok) {
         metrics.increment('resolver.cache.hit');
-        return cached;
+        return { url: cached, source: 'resolver-cache' };
       }
       metrics.increment('resolver.cache.stale');
     } else {
@@ -118,92 +118,106 @@ export async function resolveStreamUrl({
       }
     };
 
-    let url = null;
+    let resolved = null;
 
     try {
-      url = await withTimeout(
+      const url = await withTimeout(
         retry(primary, 2, {
           delayMs: 150,
           onError: (err) => logger.warn('resolver', 'youtubei failed', { videoId, error: err?.message }),
         }),
         PRIMARY_TIMEOUT_MS
       );
+      if (url) resolved = { url, source: 'youtubei' };
     } catch {
       // ignore
     }
 
-    if (url) {
+    if (resolved?.url) {
       metrics.increment('resolver.primary.success');
     }
 
-    if (!url) {
+    if (!resolved?.url) {
       try {
-        url = await withTimeout(
+        const url = await withTimeout(
           retry(secondary, 2, {
             delayMs: 150,
             onError: (err) => logger.warn('resolver', 'piped api attempt failed', { videoId, error: err?.message }),
           }),
           PRIMARY_TIMEOUT_MS
         );
+        if (url) resolved = { url, source: 'piped' };
       } catch {
         // ignore
       }
-      if (url) metrics.increment('resolver.secondary.success');
+      if (resolved?.url) metrics.increment('resolver.secondary.success');
     }
 
-    if (!url) {
+    if (!resolved?.url) {
       try {
-        url = await withTimeout(
+        const url = await withTimeout(
           retry(tertiary, 1, {
             delayMs: 0,
             onError: (err) => logger.warn('resolver', 'ytdl-core attempt failed', { videoId, error: err?.message }),
           }),
           PRIMARY_TIMEOUT_MS
         );
+        if (url) resolved = { url, source: 'ytdl-core' };
       } catch {
         // ignore
       }
-      if (url) metrics.increment('resolver.tertiary.success');
+      if (resolved?.url) metrics.increment('resolver.tertiary.success');
     }
 
-    if (!url && title) {
+    if (!resolved?.url && title) {
       try {
-        url = await withTimeout(
+        const url = await withTimeout(
           retry(quaternary, 1, {
             delayMs: 0,
             onError: (err) => logger.warn('resolver', 'soundcloud attempt failed', { videoId, error: err?.message }),
           }),
           PRIMARY_TIMEOUT_MS
         );
+        if (url) resolved = { url, source: 'soundcloud' };
       } catch {
         // ignore
       }
-      if (url) metrics.increment('resolver.quaternary.success');
+      if (resolved?.url) metrics.increment('resolver.quaternary.success');
     }
 
-    if (!url) {
+    if (!resolved?.url) {
       try {
-        url = await withTimeout(
+        const url = await withTimeout(
           retry(guardedFallback, 3, {
             delayMs: 250,
             onError: (err) => logger.warn('resolver', 'yt-dlp attempt failed', { videoId, error: err?.message }),
           }),
           FALLBACK_TIMEOUT_MS
         );
+        if (url) resolved = { url, source: 'yt-dlp' };
       } catch {
         // ignore
       }
-      if (url) metrics.increment('resolver.fallback.used');
+      if (resolved?.url) metrics.increment('resolver.fallback.used');
     }
 
-    if (!url) {
+    if (!resolved?.url) {
       metrics.increment('resolver.failure');
       throw new Error('Stream unavailable');
     }
 
     // 4) Cache stampede protection via jittered TTL
     const ttl = TTL_SECONDS + Math.floor(Math.random() * 120);
-    await cache.set(key, url, ttl);
-    return url;
+    await cache.set(key, resolved.url, ttl);
+    return resolved;
   });
+}
+
+export async function resolveStreamWithMeta(options) {
+  return await resolveStreamWithMetaInternal(options);
+}
+
+export async function resolveStreamUrl(options) {
+  const resolved = await resolveStreamWithMetaInternal(options);
+  return resolved?.url || null;
 }

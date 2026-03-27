@@ -5,6 +5,7 @@ export default function TrackCard({
   isActive,
   isPlaying,
   isFav,
+  isDownloaded,
   onPlay,
   onFav,
   onContextMenu,
@@ -13,6 +14,9 @@ export default function TrackCard({
   if (!track) return null;
 
   const coverUrl = track.coverArt || '';
+  const sourceLabel = track.source === 'saavn' ? 'SV' : track.source === 'downloaded' ? 'DL' : 'YT';
+  const sourceClass = track.source === 'saavn' ? 'badge-sv' : track.source === 'downloaded' ? 'badge-dl' : 'badge-yt';
+  const savedLabel = track.source === 'downloaded' ? 'Offline' : isDownloaded ? 'Saved' : null;
 
   if (variant === 'tile') {
     return (
@@ -28,9 +32,21 @@ export default function TrackCard({
               </div>
             </div>
           )}
+          {track.source && (
+            <span className={`source-badge ${sourceClass}`}>
+              {sourceLabel}
+            </span>
+          )}
         </div>
         <div className="tile-title">{track.title || 'Untitled'}</div>
-        <div className="tile-artist">{track.artist || 'Unknown'}</div>
+        <div className="tile-meta-row">
+          <div className="tile-artist">{track.artist || 'Unknown'}</div>
+          {savedLabel && (
+            <span className={`track-status-pill ${track.source === 'downloaded' ? 'track-status-pill--downloaded' : ''}`}>
+              {savedLabel}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
@@ -51,8 +67,8 @@ export default function TrackCard({
           style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
         >
           {track.source && (
-            <span className={`source-badge badge-${track.source === 'saavn' ? 'sv' : 'yt'}`}>
-              {track.source === 'saavn' ? 'SV' : 'YT'}
+            <span className={`source-badge ${sourceClass}`}>
+              {sourceLabel}
             </span>
           )}
 
@@ -75,7 +91,14 @@ export default function TrackCard({
       <div className="track-info">
         <div className="track-text">
           <div className="track-title">{track.title || 'Untitled'}</div>
-          <div className="artist-name">{track.artist || 'Unknown'}</div>
+          <div className="track-meta-row">
+            <div className="artist-name">{track.artist || 'Unknown'}</div>
+            {savedLabel && (
+              <span className={`track-status-pill ${track.source === 'downloaded' ? 'track-status-pill--downloaded' : ''}`}>
+                {savedLabel}
+              </span>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

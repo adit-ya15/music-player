@@ -6,11 +6,11 @@ import 'state/player_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const NullApp());
+  runApp(const AuraMusicApp());
 }
 
-class NullApp extends StatelessWidget {
-  const NullApp({super.key});
+class AuraMusicApp extends StatelessWidget {
+  const AuraMusicApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +26,7 @@ class NullApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => PlayerController(),
       child: MaterialApp(
-        title: 'Null',
+        title: 'Aura Music',
         theme: theme,
         home: const HomeShell(),
       ),

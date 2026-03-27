@@ -13,8 +13,8 @@ import rateLimit from "express-rate-limit";
 import timeout from "connect-timeout";
 import { createCache } from "./backend/cache/cache.mjs";
 
-import { resolveStreamUrl } from "./backend/resolver/streamResolver.mjs";
-import { downloadToCache, getCachedFilePath } from "./backend/cache/audioCache.mjs";
+import { resolveStreamUrl, resolveStreamWithMeta } from "./backend/resolver/streamResolver.mjs";
+import { downloadToCache, getCachedFilePath, getCacheStatus } from "./backend/cache/audioCache.mjs";
 import { ytdlpQueue } from "./backend/queue/ytdlpQueue.mjs";
 import { buildYtdlpArgs } from "./backend/providers/ytdlpProvider.mjs";
 import { spawnWithTimeout } from "./backend/lib/spawnWithTimeout.mjs";
@@ -52,7 +52,21 @@ app.get("/health", (req, res) => {
 
 // request timeout (prevents long-hanging requests)
 const requestTimeout = process.env.REQUEST_TIMEOUT || "10s";
-app.use(timeout(requestTimeout));
+const timeoutMiddleware = timeout(requestTimeout);
+const shouldSkipRequestTimeout = (req) =>
+    req.path.startsWith("/api/yt/stream/") ||
+    req.path.startsWith("/api/yt/pipe/") ||
+    req.path.startsWith("/api/yt/download/") ||
+    req.path.startsWith("/api/yt/cache/");
+
+app.use((req, res, next) => {
+    if (shouldSkipRequestTimeout(req)) {
+        req.setTimeout?.(0);
+        res.setTimeout?.(0);
+        return next();
+    }
+    return timeoutMiddleware(req, res, next);
+});
 app.use((req, res, next) => {
     if (req.timedout) {
         if (!res.headersSent) res.status(503).json({ error: "Request timeout" });
@@ -98,7 +112,6 @@ const __dirname = path.dirname(__filename);
 if (!process.env.YT_COOKIES_FILE) {
     const candidates = [
         path.join(process.cwd(), 'cookies.txt'),
-        path.join(process.cwd(), 'cookies (1).txt'),
     ];
 
     const found = candidates.find((p) => {
@@ -315,15 +328,16 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
         } catch { /* metadata is optional but needed for soundcloud fallback */ }
 
         let streamUrl = null;
-        const cachedPath = getCachedFilePath(videoId);
+        let responseDataStreamSource = null;
+        const cacheStatus = getCacheStatus(videoId);
         
-        if (cachedPath) {
+        if (cacheStatus.cached) {
             // Serve from our reliable disk cache
             streamUrl = `${req.protocol}://${req.get('host')}/api/yt/cache/${videoId}`;
             logger.info("stream", "Serving from local disk cache", { videoId });
         } else {
             // Not cached locally yet. Resolve direct URL for instant playback...
-            streamUrl = await resolveStreamUrl({
+            const resolved = await resolveStreamWithMeta({
                 innertube,
                 ytdlpBin: YT_DLP_BIN,
                 cache,
@@ -331,8 +345,10 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
                 title,
                 artist: author
             });
+            streamUrl = resolved?.url || null;
             // ...and spawn the background downloader for next time!
             downloadToCache(videoId, YT_DLP_BIN);
+            responseDataStreamSource = resolved?.source || null;
         }
 
         const responseData = {
@@ -342,6 +358,10 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
             duration,
             thumbnail,
             streamUrl,
+            cacheState: cacheStatus.cached ? "disk" : "warming",
+            cached: cacheStatus.cached,
+            cacheSizeBytes: cacheStatus.sizeBytes || 0,
+            streamSource: cacheStatus.cached ? "disk-cache" : (typeof responseDataStreamSource === "string" ? responseDataStreamSource : "unknown"),
         };
 
         res.json(responseData);
@@ -359,10 +379,79 @@ app.get("/api/yt/cache/:videoId", (req, res) => {
     const { videoId } = req.params;
     const cachedPath = getCachedFilePath(videoId);
     if (cachedPath) {
-        res.setHeader("Content-Type", "audio/mp4");
+        res.setHeader("Accept-Ranges", "bytes");
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         res.sendFile(cachedPath);
     } else {
         res.status(404).send("Not found in cache");
+    }
+});
+
+app.get("/api/yt/cache-status/:videoId", (req, res) => {
+    const { videoId } = req.params;
+    const status = getCacheStatus(videoId);
+    res.json({
+        videoId,
+        ...status,
+    });
+});
+
+app.get("/api/yt/download/:videoId", async (req, res) => {
+    const { videoId } = req.params;
+
+    if (!videoId) return res.status(400).json({ error: "videoId required" });
+
+    let title = `track-${videoId}`;
+    let author = "Aura Music";
+
+    try {
+        const innertube = await getYT();
+        const info = await innertube.music.getInfo(videoId);
+        title = info.basic_info?.title || title;
+        author = info.basic_info?.author || author;
+    } catch {
+        // Metadata is optional for downloads.
+    }
+
+    const cacheStatus = getCacheStatus(videoId);
+    const cachedPath = cacheStatus.path;
+    const filenameExt = cacheStatus.ext || '.m4a';
+    const filename = `${sanitizeFilename(`${author} - ${title}`) || `aura-${videoId}`}${filenameExt}`;
+
+    if (cachedPath) {
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return res.sendFile(cachedPath);
+    }
+
+    try {
+        const innertube = await getYT();
+        const cache = await cachePromise;
+        const streamUrl = await resolveStreamUrl({
+            innertube,
+            ytdlpBin: YT_DLP_BIN,
+            cache,
+            videoId,
+            title,
+            artist: author,
+        });
+
+        downloadToCache(videoId, YT_DLP_BIN);
+
+        const upstream = await fetch(streamUrl, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
+        });
+
+        if (!upstream.ok && upstream.status !== 206) {
+            throw new Error(`Download upstream failed with ${upstream.status}`);
+        }
+
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return pipeUpstream(upstream, res);
+    } catch (err) {
+        logger.error("download", "Download failed", { videoId, error: err?.message });
+        return res.status(500).json({ error: "Download unavailable" });
     }
 });
 
@@ -449,6 +538,82 @@ app.get("/api/yt/lyrics", async (req, res) => {
         res.json(data);
     } catch {
         res.json({ lyrics: "" });
+    }
+});
+
+app.get("/api/lyrics", async (req, res) => {
+    const { artist, title, album, duration } = req.query;
+
+    if (!artist || !title) {
+        return res.json({ ok: true, plainLyrics: "", syncedLyrics: "", source: "none" });
+    }
+
+    const params = new URLSearchParams({
+        artist_name: String(artist),
+        track_name: String(title),
+    });
+
+    if (album) params.set("album_name", String(album));
+    if (duration && Number.isFinite(Number(duration))) {
+        params.set("duration", String(Math.round(Number(duration))));
+    }
+
+    try {
+        const lrclibResp = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
+            headers: {
+                "User-Agent": HTTP_UA,
+                "Accept": "application/json",
+            },
+        });
+
+        if (lrclibResp.ok) {
+            const data = await lrclibResp.json();
+            return res.json({
+                ok: true,
+                plainLyrics: data?.plainLyrics || "",
+                syncedLyrics: data?.syncedLyrics || "",
+                source: "lrclib",
+            });
+        }
+
+        if (lrclibResp.status === 404) {
+            const searchResp = await fetch(`https://lrclib.net/api/search?${params.toString()}`, {
+                headers: {
+                    "User-Agent": HTTP_UA,
+                    "Accept": "application/json",
+                },
+            });
+
+            if (searchResp.ok) {
+                const results = await searchResp.json();
+                const match = Array.isArray(results) ? results[0] : null;
+                if (match) {
+                    return res.json({
+                        ok: true,
+                        plainLyrics: match?.plainLyrics || "",
+                        syncedLyrics: match?.syncedLyrics || "",
+                        source: "lrclib",
+                    });
+                }
+            }
+        }
+    } catch {
+        // Fall through to plain lyrics fallback.
+    }
+
+    try {
+        const ovhResp = await fetch(
+            `https://api.lyrics.ovh/v1/${encodeURIComponent(String(artist))}/${encodeURIComponent(String(title))}`
+        );
+        const data = await ovhResp.json();
+        return res.json({
+            ok: true,
+            plainLyrics: data?.lyrics || "",
+            syncedLyrics: "",
+            source: "lyrics.ovh",
+        });
+    } catch {
+        return res.json({ ok: true, plainLyrics: "", syncedLyrics: "", source: "none" });
     }
 });
 
@@ -733,6 +898,14 @@ function parseDuration(text) {
         return parts[0] * 60 + parts[1];
 
     return parts[0] || 0;
+}
+
+function sanitizeFilename(value) {
+    return String(value || "")
+        .replace(/[<>:"/\\|?*\u0000-\u001F]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
 }
 
 // ─────────────────────────────────────────────

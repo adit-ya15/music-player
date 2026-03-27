@@ -14,11 +14,12 @@ import {
   MoonStar,
   ListMusic,
   FileText,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 const FALLBACK_COVER = 'https://placehold.co/300x300/27272a/71717a?text=%E2%99%AA';
 
-export default function PlaybackBar({ onOpenLyrics, onOpenQueue }) {
+export default function PlaybackBar({ onOpenLyrics, onOpenQueue, onOpenEqualizer }) {
   const {
     currentTrack,
     isPlaying,
@@ -188,10 +189,19 @@ export default function PlaybackBar({ onOpenLyrics, onOpenQueue }) {
         </button>
         <button
           className="icon-btn"
+          onClick={onOpenEqualizer}
+          title="Equalizer"
+          aria-label="Equalizer"
+          type="button"
+        >
+          <SlidersHorizontal size={18} />
+        </button>
+        <button
+          className="icon-btn"
           onClick={onOpenLyrics}
           title="Lyrics"
-          disabled={!currentTrack || currentTrack.source !== 'saavn' || !currentTrack.hasLyrics}
-          style={{ opacity: !currentTrack || currentTrack.source !== 'saavn' || !currentTrack.hasLyrics ? 0.3 : 1 }}
+          disabled={!currentTrack}
+          style={{ opacity: !currentTrack ? 0.3 : 1 }}
           aria-label="Lyrics"
           type="button"
         >
@@ -228,5 +238,3 @@ export default function PlaybackBar({ onOpenLyrics, onOpenQueue }) {
     </footer>
   );
 }
-
-

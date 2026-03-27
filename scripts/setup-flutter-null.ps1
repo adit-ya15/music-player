@@ -53,11 +53,11 @@ $destRes = Join-Path $ProjectDir "android\app\src\main\res"
 New-Item -ItemType Directory -Force -Path $destRes | Out-Null
 Copy-Item -Recurse -Force -Path (Join-Path $templateRes '*') -Destination $destRes
 
-Write-Host "Setting Android app label to 'Null'..." -ForegroundColor Cyan
+Write-Host "Setting Android app label to 'Aura Music'..." -ForegroundColor Cyan
 $stringsPath = Join-Path $ProjectDir "android\app\src\main\res\values\strings.xml"
 if (Test-Path $stringsPath) {
   $xml = Get-Content $stringsPath -Raw
-  $xml = $xml -replace '<string name="app_name">.*?</string>', '<string name="app_name">Null</string>'
+  $xml = $xml -replace '<string name="app_name">.*?</string>', '<string name="app_name">Aura Music</string>'
   Set-Content -Path $stringsPath -Value $xml -Encoding UTF8
 }
 
@@ -67,3 +67,4 @@ Write-Host "  cd $ProjectDir" -ForegroundColor Yellow
 Write-Host "  flutter run --dart-define=AURA_BASE_URL=http://10.0.2.2:3001" -ForegroundColor Yellow
 
 Pop-Location
+

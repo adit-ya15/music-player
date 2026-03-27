@@ -12,15 +12,15 @@ export default function BottomNav({ activeTab, onTabChange }) {
   return (
     <nav className="bottom-nav">
       <div className="nav-menu">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+        {NAV_ITEMS.map((item) => (
           <button
-            key={id}
-            className={`nav-item${activeTab === id ? ' active' : ''}`}
-            onClick={() => onTabChange(id)}
-            aria-label={label}
+            key={item.id}
+            className={`nav-item${activeTab === item.id ? ' active' : ''}`}
+            onClick={() => onTabChange(item.id)}
+            aria-label={item.label}
           >
-            <Icon size={22} className="icon" />
-            <span>{label}</span>
+            <item.icon size={22} className="icon" />
+            <span>{item.label}</span>
           </button>
         ))}
       </div>

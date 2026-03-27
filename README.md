@@ -1,70 +1,110 @@
-# Null
+# Aura Music
 
-This repo contains:
+Aura Music is an Android-first music player built with React, Vite, Capacitor, and a Node.js streaming backend. The app focuses on fast playback, resilient fallback behavior, offline downloads, personalized recommendations, background playback, widget support, synced lyrics when available, and native Android media controls.
 
-- A Node.js backend (`server.mjs`) that provides music search + streaming endpoints.
-- A Flutter (Android/Kotlin) app template under `flutter-template/`.
+## Features
 
-## License
+- Background playback with lockscreen and notification controls
+- Faster replay and skip behavior with resolved stream reuse
+- Android home-screen widget and native equalizer presets
+- Song radio and personalized recommendation fallbacks
+- Offline downloads with in-app download management
+- Synced lyrics support when timed lyrics are available
+- Local fallback mixes built from downloads, favorites, and recent plays
 
-MIT — see LICENSE.
+## Repo Layout
 
-## Contributing
+- `src/`: React app UI and player state
+- `android/`: Capacitor Android shell and native media plugin
+- `backend/`: cache and provider helpers used by the API server
+- `server.mjs`: Express API for search, playback, lyrics, downloads, and recommendations
+- `tests/`: Node test coverage for shared logic
+- `flutter-template/`: separate Flutter UI scaffold kept outside the main shipping app
 
-See CONTRIBUTING.md.
+## Local Development
 
-## Security
-
-See SECURITY.md.
-
-## Backend
-
-Run the API server:
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Run the backend:
+
+```bash
 npm run server
 ```
 
-Default: `http://localhost:3001`
-
-## Frontend (Vite)
-
-Run the web app in dev mode (uses the proxy in `vite.config.js`):
+Run the web UI:
 
 ```bash
 npm run dev
 ```
 
-### Env
+Verify the project:
 
-- `VITE_API_BASE` (optional)
-	- Default: `/api` (same origin)
-	- Set this at build-time when the frontend must call a different host, e.g. `VITE_API_BASE=https://music.example.com/api`
-- `RECO_API_KEY` (optional, server)
-	- When set, `/api/track` and `/api/recommendations` require either `x-api-key: <key>` or `Authorization: Bearer <key>`.
-- `RECO_INCLUDE_SCORES` (optional, server)
-	- When set (e.g. `true`), includes a numeric `score` field in recommendation items for debugging.
-
-## Flutter (Android, Kotlin)
-
-This repo does not include a generated Flutter project by default. After installing Flutter, run:
-
-```powershell
-./scripts/setup-flutter-null.ps1
+```bash
+npm run lint
+npm test
+npm run build
 ```
 
-That will create `null_app/` (Android + Kotlin), copy the UI from `flutter-template/`, and apply the launcher icon resources.
+## Android App
 
-Run on Android emulator (backend on your PC):
+Build the web assets first, then assemble the Android app:
 
-```powershell
-cd null_app
-flutter run --dart-define=AURA_BASE_URL=http://10.0.2.2:3001
+```bash
+npm run build
+npx cap sync android
+cd android
+./gradlew assembleDebug
 ```
 
-Run on a real device (replace with your PC IP):
+For Windows PowerShell:
 
 ```powershell
-flutter run --dart-define=AURA_BASE_URL=http://192.168.x.x:3001
+npm run build
+npx cap sync android
+cd android
+.\gradlew.bat assembleDebug
 ```
+
+## Environment
+
+Useful local settings live in `.env.example`.
+
+Production-safe defaults live in `.env.production.example`.
+
+Important environment variables:
+
+- `VITE_API_BASE`: frontend API base URL
+- `RECO_API_KEY`: protects recommendation endpoints in production
+- `REDIS_URL`: optional Redis cache for production reliability
+- `YT_DLP_BIN`: path to `yt-dlp`
+- `YT_COOKIES_FILE`: optional absolute path to a local cookies export kept outside the repo
+
+## Production Notes
+
+- Put the backend behind HTTPS and set `TRUST_PROXY` correctly.
+- Keep cookies files, API keys, and signing materials out of Git.
+- Add Redis for cache durability across restarts.
+- Test real-device behavior for weak network, offline playback, queue advance, and download recovery.
+- Create signed Android release builds before distribution.
+
+## Platform Support
+
+- Android app: primary target with widget, equalizer, downloads, and native media integration
+- Web preview: useful for development and UI checks, with graceful fallbacks where native APIs are unavailable
+
+## Open Source Docs
+
+- [Contributing](./CONTRIBUTING.md)
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
+- [Security Policy](./SECURITY.md)
+- [Privacy Notes](./PRIVACY.md)
+- [Roadmap](./ROADMAP.md)
+- [Release Checklist](./OPEN_SOURCE_RELEASE_CHECKLIST.md)
+
+## License
+
+MIT. See [LICENSE](./LICENSE).

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to **Null**.
+Thanks for your interest in contributing to **Aura Music**.
 
 ## Quick start
 
@@ -9,6 +9,7 @@ Thanks for your interest in contributing to **Null**.
 - Run dev stack: `npm run dev:all`
   - Web UI: Vite dev server
   - API: `server.mjs`
+  - Android shell: `android/` via Capacitor
 - Run checks before PR:
   - `npm run lint`
   - `npm test`

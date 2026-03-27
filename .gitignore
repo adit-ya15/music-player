@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.gradle-user/
 *.local
 
 # Editor directories and files
@@ -34,6 +35,7 @@ build_error.txt
 build_output.txt
 error.txt
 yt_error.txt
+*.bak
 *-player-script.js
 
 # Env files

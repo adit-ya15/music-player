@@ -1,6 +1,6 @@
 # Code of Conduct
 
-We want **Null** to be a welcoming project for everyone.
+We want **Aura Music** to be a welcoming project for everyone.
 
 ## Our standards
 

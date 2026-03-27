@@ -70,7 +70,7 @@ export const youtubeApi = {
     const pipeUrl = `${YT_API_BASE}/pipe/${videoId}`;
 
     if (!preferDirect) {
-      return { videoId, streamUrl: pipeUrl, pipeUrl, directUrl: null };
+      return { videoId, streamUrl: pipeUrl, pipeUrl, directUrl: null, cacheState: 'pipe', cached: false, streamSource: 'pipe-proxy' };
     }
 
     const result = await youtubeApi.getStreamDetailsSafe(videoId);
@@ -80,6 +80,29 @@ export const youtubeApi = {
       streamUrl: directUrl || null,
       pipeUrl,
       directUrl: directUrl || null,
+      cacheState: result.ok ? result.data?.cacheState || 'warming' : 'warming',
+      cached: Boolean(result.ok ? result.data?.cached : false),
+      cacheSizeBytes: Number(result.ok ? result.data?.cacheSizeBytes || 0 : 0),
+      streamSource: result.ok ? result.data?.streamSource || null : null,
+    };
+  },
+
+  getCacheStatusSafe: async (videoId) => {
+    const result = await requestYoutube(
+      'youtube.getCacheStatus',
+      `/cache-status/${videoId}`,
+      { timeout: 8000 },
+      'Cache status is unavailable right now.'
+    );
+
+    if (!result.ok) {
+      return { ok: false, data: null, error: result.error };
+    }
+
+    return {
+      ok: true,
+      data: result.response?.data || null,
+      error: null,
     };
   },
 

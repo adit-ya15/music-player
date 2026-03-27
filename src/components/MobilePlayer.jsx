@@ -3,12 +3,12 @@ import { usePlayer } from '../context/PlayerContext';
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward,
   Repeat, Repeat1, Shuffle, ListMusic, FileText, Heart,
-  Infinity as InfinityIcon, Share2
+  Infinity as InfinityIcon, Share2, SlidersHorizontal
 } from 'lucide-react';
 
 const FALLBACK_COVER = 'https://placehold.co/500x500/27272a/71717a?text=%E2%99%AA';
 
-export default function MobilePlayer({ onOpenLyrics, onOpenQueue }) {
+export default function MobilePlayer({ onOpenLyrics, onOpenQueue, onOpenEqualizer }) {
   const {
     currentTrack,
     isPlaying,
@@ -284,6 +284,10 @@ export default function MobilePlayer({ onOpenLyrics, onOpenQueue }) {
               <FileText size={20} />
               <span>Lyrics</span>
             </button>
+            <button className="fp-bottom-btn" onClick={() => { setIsExpanded(false); onOpenEqualizer(); }} aria-label="Equalizer" type="button">
+              <SlidersHorizontal size={20} />
+              <span>EQ</span>
+            </button>
             <button className="fp-bottom-btn" onClick={handleShare} aria-label="Share" type="button">
               <Share2 size={20} />
               <span>Share</span>
@@ -298,4 +302,3 @@ export default function MobilePlayer({ onOpenLyrics, onOpenQueue }) {
     </div>
   );
 }
-

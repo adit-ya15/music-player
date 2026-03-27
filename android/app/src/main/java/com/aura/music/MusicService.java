@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.audiofx.Equalizer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -21,6 +22,7 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 
+import com.getcapacitor.JSObject;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.PlaybackException;
@@ -48,8 +50,13 @@ public class MusicService extends Service {
     
     private static final String CHANNEL_ID = "MusicPlaybackChannel";
     private static final int NOTIFICATION_ID = 1;
+    private static final String WIDGET_EMPTY_TITLE = "Aura Music";
+    private static final String WIDGET_EMPTY_ARTIST = "Play something you like";
 
     private static final String HTTP_UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36";
+    private static MusicService instance;
+    private static boolean desiredEqualizerEnabled = false;
+    private static int desiredEqualizerPreset = 0;
 
     private ExoPlayer player;
     private MediaSessionCompat mediaSession;
@@ -60,6 +67,8 @@ public class MusicService extends Service {
     /* ── Native track queue for background autoplay ── */
     private final ArrayList<QueueItem> trackQueue = new ArrayList<>();
     private int currentQueueIndex = -1;
+    private int queueOffset = 0;
+    private Equalizer equalizer;
 
     /* ── Audio focus ── */
     private AudioManager audioManager;
@@ -133,6 +142,7 @@ public class MusicService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         createNotificationChannel();
 
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -158,6 +168,12 @@ public class MusicService extends Service {
                 updateNotification();
                 updatePlaybackState();
             }
+
+            @Override
+            public void onAudioSessionIdChanged(int audioSessionId) {
+                configureEqualizer(audioSessionId);
+            }
+
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_ENDED) {
@@ -181,6 +197,10 @@ public class MusicService extends Service {
         });
 
         mediaSession = new MediaSessionCompat(this, "AuraMusicSession");
+        mediaSession.setFlags(
+            MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
+            MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+        );
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override
             public void onPlay() {
@@ -201,6 +221,37 @@ public class MusicService extends Service {
         });
         mediaSession.setActive(true);
         handler.post(statusRunnable);
+    }
+
+    public static JSObject getEqualizerStateSnapshot() {
+        MusicService service = instance;
+        if (service != null) {
+            return service.buildEqualizerState();
+        }
+
+        JSObject ret = new JSObject();
+        ret.put("available", false);
+        ret.put("enabled", desiredEqualizerEnabled);
+        ret.put("currentPreset", desiredEqualizerPreset);
+        ret.put("presets", new JSONArray());
+        ret.put("message", "Start playback on Android to use the equalizer.");
+        return ret;
+    }
+
+    public static void setEqualizerEnabledStatic(boolean enabled) {
+        desiredEqualizerEnabled = enabled;
+        MusicService service = instance;
+        if (service != null) {
+            service.applyEqualizerState();
+        }
+    }
+
+    public static void setEqualizerPresetStatic(int preset) {
+        desiredEqualizerPreset = Math.max(0, preset);
+        MusicService service = instance;
+        if (service != null) {
+            service.applyEqualizerState();
+        }
     }
 
     @Override
@@ -286,6 +337,7 @@ public class MusicService extends Service {
     private void handleSetQueue(Intent intent) {
         String json = intent.getStringExtra("queue");
         int index = intent.getIntExtra("currentIndex", -1);
+        int offset = intent.getIntExtra("offset", 0);
         if (json == null) return;
 
         try {
@@ -301,6 +353,7 @@ public class MusicService extends Service {
                 ));
             }
             currentQueueIndex = index;
+            queueOffset = Math.max(0, offset);
             android.util.Log.d("MusicService", "Queue set: " + trackQueue.size() + " tracks, index=" + index);
         } catch (Exception e) {
             android.util.Log.e("MusicService", "Failed to parse queue JSON", e);
@@ -319,6 +372,75 @@ public class MusicService extends Service {
         sendExplicitBroadcast("com.aura.music.SKIP_PREV");
     }
 
+    private void configureEqualizer(int audioSessionId) {
+        releaseEqualizer();
+
+        if (audioSessionId <= 0) {
+            return;
+        }
+
+        try {
+            equalizer = new Equalizer(0, audioSessionId);
+            applyEqualizerState();
+        } catch (Exception e) {
+            android.util.Log.w("MusicService", "Equalizer unavailable", e);
+            releaseEqualizer();
+        }
+    }
+
+    private void applyEqualizerState() {
+        if (equalizer == null) return;
+
+        try {
+            short presetCount = equalizer.getNumberOfPresets();
+            if (presetCount > 0) {
+                short safePreset = (short) Math.max(0, Math.min(desiredEqualizerPreset, presetCount - 1));
+                desiredEqualizerPreset = safePreset;
+                equalizer.usePreset(safePreset);
+            }
+            equalizer.setEnabled(desiredEqualizerEnabled);
+        } catch (Exception e) {
+            android.util.Log.w("MusicService", "Failed to apply equalizer state", e);
+        }
+    }
+
+    private void releaseEqualizer() {
+        if (equalizer != null) {
+            try {
+                equalizer.release();
+            } catch (Exception ignored) {
+                // ignore
+            }
+            equalizer = null;
+        }
+    }
+
+    private JSObject buildEqualizerState() {
+        JSObject ret = new JSObject();
+        JSONArray presets = new JSONArray();
+        boolean available = equalizer != null;
+
+        if (equalizer != null) {
+            try {
+                short presetCount = equalizer.getNumberOfPresets();
+                for (short i = 0; i < presetCount; i++) {
+                    presets.put(equalizer.getPresetName(i));
+                }
+            } catch (Exception e) {
+                android.util.Log.w("MusicService", "Failed to read equalizer presets", e);
+            }
+        }
+
+        ret.put("available", available);
+        ret.put("enabled", desiredEqualizerEnabled);
+        ret.put("currentPreset", desiredEqualizerPreset);
+        ret.put("presets", presets);
+        if (!available) {
+            ret.put("message", "Start playback on Android to use the equalizer.");
+        }
+        return ret;
+    }
+
     private boolean playNextFromQueue() {
         int nextIdx = currentQueueIndex + 1;
         if (nextIdx >= 0 && nextIdx < trackQueue.size()) {
@@ -331,7 +453,7 @@ public class MusicService extends Service {
                 playTrack(item.url);
                 // Notify JS about the change so UI can sync
                 Intent syncIntent = new Intent("com.aura.music.QUEUE_INDEX_CHANGED");
-                syncIntent.putExtra("index", nextIdx);
+                syncIntent.putExtra("index", queueOffset + nextIdx);
                 sendExplicitBroadcast(syncIntent);
                 return true;
             }
@@ -350,7 +472,7 @@ public class MusicService extends Service {
                 currentArtwork = item.artwork;
                 playTrack(item.url);
                 Intent syncIntent = new Intent("com.aura.music.QUEUE_INDEX_CHANGED");
-                syncIntent.putExtra("index", prevIdx);
+                syncIntent.putExtra("index", queueOffset + prevIdx);
                 sendExplicitBroadcast(syncIntent);
                 return true;
             }
@@ -359,7 +481,7 @@ public class MusicService extends Service {
     }
 
     private void updatePlaybackState() {
-        int state = player.getPlayWhenReady() ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
+        int state = player.isPlaying() ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
         mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
                 .setState(state, player.getCurrentPosition(), 1.0f)
                 .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE |
@@ -371,13 +493,14 @@ public class MusicService extends Service {
     private void updateNotification() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) nm.notify(NOTIFICATION_ID, createNotification());
+        AuraWidgetProvider.updateAll(this, currentTitle, currentArtist, player != null && player.isPlaying());
     }
 
     private Notification createNotification() {
         Intent notifyIntent = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, notifyIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
-        boolean isPlaying = player.getPlayWhenReady();
+        boolean isPlaying = player.isPlaying();
         
         NotificationCompat.Action playPauseAction = isPlaying ?
                 new NotificationCompat.Action(android.R.drawable.ic_media_pause, "Pause", getServiceIntent(ACTION_PAUSE)) :
@@ -437,15 +560,21 @@ public class MusicService extends Service {
         player.setMediaItem(item);
         player.prepare();
         requestAudioFocusAndPlay();
+        AuraWidgetProvider.updateAll(this, currentTitle, currentArtist, true);
     }
 
     @Override
     public void onDestroy() {
         if (player != null) player.release();
+        releaseEqualizer();
         if (mediaSession != null) mediaSession.release();
         handler.removeCallbacks(statusRunnable);
         if (audioManager != null && audioFocusRequest != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioManager.abandonAudioFocusRequest(audioFocusRequest);
+        }
+        AuraWidgetProvider.updateAll(this, WIDGET_EMPTY_TITLE, WIDGET_EMPTY_ARTIST, false);
+        if (instance == this) {
+            instance = null;
         }
         super.onDestroy();
     }
