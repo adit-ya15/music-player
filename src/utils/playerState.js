@@ -77,14 +77,35 @@ export const serializeSession = ({ queue = [], queueIndex = -1, currentTrack = n
   currentTrack,
 });
 
+const normalizeStoredTrack = (track) => {
+  if (!track || typeof track !== 'object') return null;
+  const id = track.id == null ? '' : String(track.id).trim();
+  if (!id) return null;
+  return {
+    ...track,
+    id,
+    title: typeof track.title === 'string' && track.title.trim() ? track.title : 'Unknown',
+    artist: typeof track.artist === 'string' && track.artist.trim() ? track.artist : 'Unknown',
+    coverArt: typeof track.coverArt === 'string' ? track.coverArt : '',
+    source: typeof track.source === 'string' ? track.source : 'youtube',
+  };
+};
+
 export const parseStoredSession = (rawValue) => {
   try {
     if (!rawValue) return null;
     const parsed = JSON.parse(rawValue);
+    const queue = Array.isArray(parsed?.queue)
+      ? parsed.queue.map(normalizeStoredTrack).filter(Boolean)
+      : [];
+    const fallbackIndex = typeof parsed?.queueIndex === 'number' ? parsed.queueIndex : -1;
+    const boundedIndex = queue.length > 0 && fallbackIndex >= 0 && fallbackIndex < queue.length ? fallbackIndex : -1;
+    const currentTrack = normalizeStoredTrack(parsed?.currentTrack) || (boundedIndex >= 0 ? queue[boundedIndex] : null);
+
     return {
-      queue: Array.isArray(parsed?.queue) ? parsed.queue : [],
-      queueIndex: typeof parsed?.queueIndex === 'number' ? parsed.queueIndex : -1,
-      currentTrack: parsed?.currentTrack || null,
+      queue,
+      queueIndex: boundedIndex,
+      currentTrack,
     };
   } catch {
     return null;

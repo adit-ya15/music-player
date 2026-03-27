@@ -933,10 +933,6 @@ export const PlayerProvider = ({ children }) => {
     }
   }, [currentTrack]);
 
-  useEffect(() => {
-    refreshEqualizerState();
-  }, [refreshEqualizerState, currentTrack?.id, isPlaying]);
-
   /* -------------------------- QUEUE MANAGEMENT -------------------------- */
 
   const removeFromQueue = useCallback((index) => {

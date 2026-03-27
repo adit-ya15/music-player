@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
 
+const isPlainObject = (value) => Object.prototype.toString.call(value) === '[object Object]';
+
+const matchesInitialShape = (value, initialValue) => {
+    if (Array.isArray(initialValue)) return Array.isArray(value);
+    if (isPlainObject(initialValue)) return isPlainObject(value);
+    if (initialValue == null) return true;
+    return typeof value === typeof initialValue;
+};
+
 export function useLocalStorage(key, initialValue) {
     // State to store our value
     // Pass initial state function to useState so logic is only executed once
@@ -11,7 +20,9 @@ export function useLocalStorage(key, initialValue) {
             // Get from local storage by key
             const item = window.localStorage.getItem(key);
             // Parse stored json or if none return initialValue
-            return item ? JSON.parse(item) : initialValue;
+            if (!item) return initialValue;
+            const parsed = JSON.parse(item);
+            return matchesInitialShape(parsed, initialValue) ? parsed : initialValue;
         } catch (error) {
             // If error also return initialValue
             console.warn(error);

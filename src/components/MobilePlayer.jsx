@@ -8,7 +8,7 @@ import {
 
 const FALLBACK_COVER = 'https://placehold.co/500x500/27272a/71717a?text=%E2%99%AA';
 
-export default function MobilePlayer({ onOpenLyrics, onOpenQueue, onOpenEqualizer, isSuppressed = false }) {
+export default function MobilePlayer({ onOpenLyrics, onOpenQueue, onOpenEqualizer }) {
   const {
     currentTrack,
     isPlaying,
@@ -132,18 +132,20 @@ export default function MobilePlayer({ onOpenLyrics, onOpenQueue, onOpenEqualize
     event.currentTarget.src = FALLBACK_COVER;
   };
 
-  const glowColorStrong = dominantColor.replace('rgb', 'rgba').replace(')', ', 0.55)');
+  const safeDominantColor = typeof dominantColor === 'string' && dominantColor.trim()
+    ? dominantColor
+    : 'rgba(15,15,19,1)';
+  const glowColorStrong = safeDominantColor.replace('rgb', 'rgba').replace(')', ', 0.55)');
   const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat;
 
   return (
     <div className="mobile-player-wrapper" aria-live="polite">
       {/* ─── Mini Player ────────────────────────── */}
       <div
-        className={`mobile-mini-player ${isExpanded || isSuppressed ? 'hidden' : ''}`}
+        className={`mobile-mini-player ${isExpanded ? 'hidden' : ''}`}
         onClick={() => setIsExpanded(true)}
         role="button"
         tabIndex={0}
-        aria-hidden={isExpanded || isSuppressed}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();

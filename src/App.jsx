@@ -144,6 +144,8 @@ function App() {
   const [contextMenu, setContextMenu] = useState({ open: false, x: 0, y: 0, track: null, trackList: [] });
   const [contextMenuFocusIndex, setContextMenuFocusIndex] = useState(0);
   const contextMenuActionRefs = useRef([]);
+  const downloadBridgeReadyRef = useRef(false);
+  const downloadListenerRefs = useRef({ progress: null, complete: null, failed: null });
 
   const [favorites, setFavorites] = useLocalStorage('aura-favorites', []);
   const [playlists, setPlaylists] = useLocalStorage('aura-playlists', []);
@@ -227,6 +229,71 @@ function App() {
     }
   }, []);
 
+  const ensureNativeDownloadsReady = useCallback(async () => {
+    if (!Capacitor.isNativePlatform() || downloadBridgeReadyRef.current) return;
+
+    downloadBridgeReadyRef.current = true;
+
+    try {
+      await loadDownloads();
+
+      const [progressListener, completeListener, failedListener] = await Promise.all([
+        nativeMediaApi.onDownloadProgress((event) => {
+          if (!event?.id) return;
+          setDownloadJobs((prev) => ({
+            ...prev,
+            [event.id]: {
+              ...(prev[event.id] || {}),
+              id: event.id,
+              title: event.title || prev[event.id]?.title || 'Downloading track',
+              progress: Number(event.progress || 0),
+              status: event.status || 'downloading',
+              message: '',
+            },
+          }));
+        }),
+        nativeMediaApi.onDownloadCompleted((event) => {
+          if (event?.track) {
+            setDownloadedTracks((prev) =>
+              dedupeTracks([event.track, ...prev.filter((item) => getTrackSourceId(item) !== getTrackSourceId(event.track))])
+            );
+          }
+          setDownloadSummary((prev) => event?.summary || prev);
+          setDownloadJobs((prev) => {
+            const next = { ...prev };
+            const id = getTrackSourceId(event?.track);
+            if (id) delete next[id];
+            return next;
+          });
+        }),
+        nativeMediaApi.onDownloadFailed((event) => {
+          if (!event?.id) return;
+          const nextStatus = event.status || (/cancel/i.test(event.message || '') ? 'canceled' : 'failed');
+          setDownloadJobs((prev) => ({
+            ...prev,
+            [event.id]: {
+              ...(prev[event.id] || {}),
+              id: event.id,
+              title: prev[event.id]?.title || 'Download',
+              progress: prev[event.id]?.progress || 0,
+              status: nextStatus,
+              message: event.message || (nextStatus === 'canceled' ? 'Download canceled.' : 'Download failed.'),
+            },
+          }));
+        }),
+      ]);
+
+      downloadListenerRefs.current = {
+        progress: progressListener,
+        complete: completeListener,
+        failed: failedListener,
+      };
+    } catch (error) {
+      downloadBridgeReadyRef.current = false;
+      logError('app.ensureNativeDownloadsReady', error);
+    }
+  }, [loadDownloads]);
+
   /* ════════════════ History tracking ════════════════ */
   useEffect(() => {
     if (!currentTrack) return;
@@ -234,78 +301,30 @@ function App() {
   }, [currentTrack, setHistory]);
 
   useEffect(() => {
-    let mounted = true;
-    let progressListener;
-    let completeListener;
-    let failedListener;
-
-    loadDownloads();
-
-    const attachDownloadListeners = async () => {
-      progressListener = await nativeMediaApi.onDownloadProgress((event) => {
-        if (!mounted || !event?.id) return;
-        setDownloadJobs((prev) => ({
-          ...prev,
-          [event.id]: {
-            ...(prev[event.id] || {}),
-            id: event.id,
-            title: event.title || prev[event.id]?.title || 'Downloading track',
-            progress: Number(event.progress || 0),
-            status: event.status || 'downloading',
-            message: '',
-          },
-        }));
-      });
-
-      completeListener = await nativeMediaApi.onDownloadCompleted((event) => {
-        if (!mounted) return;
-        if (event?.track) {
-          setDownloadedTracks((prev) =>
-            dedupeTracks([event.track, ...prev.filter((item) => getTrackSourceId(item) !== getTrackSourceId(event.track))])
-          );
-        }
-        setDownloadSummary((prev) => event?.summary || prev);
-        setDownloadJobs((prev) => {
-          const next = { ...prev };
-          const id = getTrackSourceId(event?.track);
-          if (id) delete next[id];
-          return next;
-        });
-      });
-
-      failedListener = await nativeMediaApi.onDownloadFailed((event) => {
-        if (!mounted || !event?.id) return;
-        const nextStatus = event.status || (/cancel/i.test(event.message || '') ? 'canceled' : 'failed');
-        setDownloadJobs((prev) => ({
-          ...prev,
-          [event.id]: {
-            ...(prev[event.id] || {}),
-            id: event.id,
-            title: prev[event.id]?.title || 'Download',
-            progress: prev[event.id]?.progress || 0,
-            status: nextStatus,
-            message: event.message || (nextStatus === 'canceled' ? 'Download canceled.' : 'Download failed.'),
-          },
-        }));
-      });
-    };
-
-    attachDownloadListeners();
-
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     return () => {
-      mounted = false;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      progressListener?.remove?.();
-      completeListener?.remove?.();
-      failedListener?.remove?.();
+      downloadListenerRefs.current.progress?.remove?.();
+      downloadListenerRefs.current.complete?.remove?.();
+      downloadListenerRefs.current.failed?.remove?.();
+      downloadListenerRefs.current = { progress: null, complete: null, failed: null };
+      downloadBridgeReadyRef.current = false;
     };
-  }, [loadDownloads]);
+  }, []);
+
+  useEffect(() => {
+    const shouldWarmDownloads = Capacitor.isNativePlatform()
+      && (isOffline || activeTab === 'library' || librarySubView === 'downloads' || librarySubView === 'settings');
+
+    if (shouldWarmDownloads) {
+      void ensureNativeDownloadsReady();
+    }
+  }, [activeTab, ensureNativeDownloadsReady, isOffline, librarySubView]);
 
   /* ════════════════ Load trending ════════════════ */
   const loadTrending = useCallback(async () => {
@@ -564,6 +583,7 @@ function App() {
 
   const handleCancelDownload = useCallback(async (id) => {
     if (!id) return;
+    await ensureNativeDownloadsReady();
     setDownloadJobs((prev) => ({
       ...prev,
       [id]: {
@@ -587,7 +607,7 @@ function App() {
         },
       }));
     }
-  }, []);
+  }, [ensureNativeDownloadsReady]);
 
   const handleDismissDownloadJob = useCallback((id) => {
     setDownloadJobs((prev) => {
@@ -603,6 +623,7 @@ function App() {
     if (!downloadedTrack || !downloadId) return false;
 
     try {
+      await ensureNativeDownloadsReady();
       const result = await nativeMediaApi.deleteDownloadedTrack(downloadId);
       if (result?.deleted) {
         setDownloadedTracks((prev) => prev.filter((item) => getTrackSourceId(item) !== downloadId));
@@ -620,7 +641,7 @@ function App() {
     } catch {
       return false;
     }
-  }, [getDownloadedEntry, loadDownloads]);
+  }, [ensureNativeDownloadsReady, getDownloadedEntry, loadDownloads]);
 
   const handleDownloadTrack = useCallback(async () => {
     const track = contextMenu.track;
@@ -643,6 +664,7 @@ function App() {
     }
 
     if (Capacitor.isNativePlatform()) {
+      await ensureNativeDownloadsReady();
       const downloadId = getTrackSourceId(track);
       setDownloadJobs((prev) => ({
         ...prev,
@@ -690,7 +712,7 @@ function App() {
     link.remove();
 
     closeContextMenu();
-  }, [closeContextMenu, contextMenu.track, getDownloadedEntry, handleDeleteDownloadedTrack]);
+  }, [closeContextMenu, contextMenu.track, ensureNativeDownloadsReady, getDownloadedEntry, handleDeleteDownloadedTrack]);
 
   const handleAddToPlaylist = useCallback((playlistId) => {
     const track = contextMenu.track;
@@ -1257,12 +1279,7 @@ function App() {
 
       {/* Players */}
       <PlaybackBar onOpenLyrics={() => setIsLyricsOpen(true)} onOpenQueue={() => setIsQueueOpen(true)} onOpenEqualizer={() => setIsEqualizerOpen(true)} />
-      <MobilePlayer
-        onOpenLyrics={() => setIsLyricsOpen(true)}
-        onOpenQueue={() => setIsQueueOpen(true)}
-        onOpenEqualizer={() => setIsEqualizerOpen(true)}
-        isSuppressed={contextMenu.open}
-      />
+      <MobilePlayer onOpenLyrics={() => setIsLyricsOpen(true)} onOpenQueue={() => setIsQueueOpen(true)} onOpenEqualizer={() => setIsEqualizerOpen(true)} />
       <EqualizerModal isOpen={isEqualizerOpen} onClose={() => setIsEqualizerOpen(false)} />
       <LyricsModal isOpen={isLyricsOpen} onClose={() => setIsLyricsOpen(false)} />
       <QueueViewer isOpen={isQueueOpen} onClose={() => setIsQueueOpen(false)} />
