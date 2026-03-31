@@ -40,7 +40,7 @@ export function buildYtdlpArgs(videoId, options = {}) {
   const {
     extractorArgs = process.env.YT_EXTRACTOR_ARGS || '',
     sourceAddress = process.env.YT_SOURCE_ADDRESS,
-    playerClient = process.env.YT_PLAYER_CLIENTS || 'android_vr',
+    playerClient = process.env.YT_PLAYER_CLIENTS || 'mediaconnect',
     cookiesFile = process.env.YT_COOKIES_FILE,
     jsRuntimes = process.env.YT_DLP_JS_RUNTIMES || 'node',
     proxy = getYtdlpProxy(),
@@ -57,12 +57,15 @@ export function buildYtdlpArgs(videoId, options = {}) {
   if (proxy) args.push('--proxy', proxy);
 
   // Basic headers help reduce bot-gating, without requiring cookies.
-  // (Do NOT add cookies here.)
   args.push('--add-header', 'User-Agent: com.google.android.youtube/19.09.37 (Linux; Android 13)');
   args.push('--add-header', 'Accept-Language: en-US,en;q=0.9');
 
-  // Always set a cookie-free player client. yt-dlp supports trying multiple clients via comma-separated list.
-  if (playerClient) args.push('--extractor-args', `youtube:player_client=${playerClient}`);
+  // Skip the webpage download (avoids HTTP 429 on datacenter IPs) and use a
+  // cookie-free player client. Combined into one --extractor-args to avoid overrides.
+  const skipWebpage = process.env.YT_PLAYER_SKIP || 'webpage';
+  const extractorParts = [`player_client=${playerClient}`, `player_skip=${skipWebpage}`];
+  args.push('--extractor-args', `youtube:${extractorParts.join(';')}`);
+  
   if (extractorArgs) args.push('--extractor-args', extractorArgs);
 
   if (sourceAddress) args.push('--source-address', sourceAddress);
@@ -105,7 +108,7 @@ export async function ytdlpGetUrl(bin, videoId, options = {}) {
     logger.warn('provider.ytdlp', 'yt-dlp requires sign-in/cookies (skipping)', {
       videoId,
       code,
-      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'android_vr',
+      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'mediaconnect',
       hasCookies: Boolean(process.env.YT_COOKIES_FILE),
       hasProxy: Boolean(getYtdlpProxy()),
       stderr: err.slice(0, 300),
@@ -118,7 +121,7 @@ export async function ytdlpGetUrl(bin, videoId, options = {}) {
     logger.warn('provider.ytdlp', 'yt-dlp returned no URL', {
       videoId,
       code,
-      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'android_vr',
+      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'mediaconnect',
       hasCookies: Boolean(process.env.YT_COOKIES_FILE),
       hasProxy: Boolean(getYtdlpProxy()),
       stderr: err.slice(0, 300),

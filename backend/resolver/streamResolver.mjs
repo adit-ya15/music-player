@@ -8,6 +8,7 @@ import { pipedGetAudioUrl } from '../providers/pipedProvider.mjs';
 import { ytdlCoreGetAudioUrl } from '../providers/ytdlCoreProvider.mjs';
 import { soundcloudGetAudioUrl } from '../providers/soundcloudProvider.mjs';
 import { ytdlpGetUrl } from '../providers/ytdlpProvider.mjs';
+import { invidiousGetAudioUrl } from '../providers/invidiousProvider.mjs';
 import { ytdlpQueue } from '../queue/ytdlpQueue.mjs';
 import { isStreamAlive } from '../utils/validateStream.mjs';
 
@@ -19,7 +20,7 @@ const FALLBACK_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 8000)
 );
-const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'android_vr,android,ios')
+const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'mediaconnect,tv,web_creator')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
@@ -66,7 +67,7 @@ async function resolveStreamWithMetaInternal({
       return url;
     };
 
-    // 3) yt-dlp secondary (most reliable general fallback on production servers)
+    // 3) yt-dlp secondary (uses player_skip=webpage to avoid 429 on datacenter IPs)
     const secondary = async () => {
       if (!ytdlpBin) return null;
       const now = Date.now();
@@ -119,7 +120,14 @@ async function resolveStreamWithMetaInternal({
       return url;
     };
 
-    // 5) ytdl-core quaternary (often blocked by bot checks)
+    // 5) Invidious API (another free YouTube frontend, separate from Piped)
+    const invidiousFallback = async () => {
+      const url = await invidiousGetAudioUrl(videoId);
+      if (!url) return null;
+      return url;
+    };
+
+    // 6) ytdl-core (often blocked by bot checks)
     const quaternary = async () => {
       const url = await ytdlCoreGetAudioUrl(videoId);
       if (!url) return null;
@@ -182,6 +190,22 @@ async function resolveStreamWithMetaInternal({
         // ignore
       }
       if (resolved?.url) metrics.increment('resolver.tertiary.success');
+    }
+
+    if (!resolved?.url) {
+      try {
+        const url = await withTimeout(
+          retry(invidiousFallback, 1, {
+            delayMs: 150,
+            onError: (err) => logger.warn('resolver', 'invidious attempt failed', { videoId, error: err?.message }),
+          }),
+          PRIMARY_TIMEOUT_MS
+        );
+        if (url) resolved = { url, source: 'invidious' };
+      } catch {
+        // ignore
+      }
+      if (resolved?.url) metrics.increment('resolver.invidious.success');
     }
 
     if (!resolved?.url && title) {

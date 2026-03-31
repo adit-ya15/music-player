@@ -1,12 +1,15 @@
 import axios from 'axios';
 import { logger } from '../lib/logger.mjs';
 
-// Public Piped instances — highly reliable open-source YouTube frontends.
+// Public Piped instances — open-source YouTube frontends.
+// Shuffle on use to distribute load. Stale instances are tolerated (they just 404/timeout).
 const PIPED_INSTANCES = [
     'https://pipedapi.kavin.rocks',
-    'https://pipedapi.in.projectsegfau.lt',
-    'https://pipedapi.us.projectsegfau.lt',
-    'https://pipedapi.r4fo.com'
+    'https://pipedapi.r4fo.com',
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.darkness.services',
+    'https://pipedapi.drgns.space',
+    'https://pipedapi.smnz.de',
 ];
 
 /**
