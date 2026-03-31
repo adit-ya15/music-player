@@ -154,7 +154,7 @@ export function downloadToCache(videoId, ytdlpBin) {
     args.push('--add-header', 'User-Agent: com.google.android.youtube/19.09.37 (Linux; Android 13)');
     args.push('--add-header', 'Accept-Language: en-US,en;q=0.9');
 
-    const playerClient = process.env.YT_PLAYER_CLIENTS || 'mediaconnect';
+    const playerClient = process.env.YT_PLAYER_CLIENTS || 'tv';
     const skipWebpage = process.env.YT_PLAYER_SKIP || 'webpage';
     args.push('--extractor-args', `youtube:player_client=${playerClient};player_skip=${skipWebpage}`);
 
