@@ -13,7 +13,6 @@ import { Capacitor } from '@capacitor/core';
 
 import { nativeMediaApi } from "../api/nativeMedia";
 import { youtubeApi } from "../api/youtube";
-import { saavnApi } from "../api/saavn";
 import { recommendationsApi } from "../api/recommendations";
 import { getOrCreateUserId } from "../utils/userId";
 
@@ -29,8 +28,6 @@ import {
   loadStoredTrackCollections
 } from "../utils/recommendationFallback";
 import { MusicPlayer } from "../native/musicPlayer";
-import { pickBestTrackMatch } from "../../shared/trackMatch.js";
-
 const PlayerContext = createContext();
 
 /** Extract dominant color from an Image element using Canvas. */
@@ -349,30 +346,6 @@ export const PlayerProvider = ({ children }) => {
 
   /* -------------------------- PLAY TRACK -------------------------- */
 
-  const trySaavnFallback = useCallback(async (track) => {
-    if (!track?.title) return null;
-    const q = `${track.title} ${track.artist || ''}`.trim();
-    if (!q) return null;
-
-    // Attempt 1
-    let result = await saavnApi.searchSongsSafe(q, 5);
-    // If rate-limited or failed, retry once after 2s backoff
-    if (!result.ok || !Array.isArray(result.data) || result.data.length === 0) {
-      await new Promise((r) => setTimeout(r, 2000));
-      result = await saavnApi.searchSongsSafe(q, 5);
-    }
-    if (!result.ok || !Array.isArray(result.data) || result.data.length === 0) return null;
-
-    const matchedTrack = pickBestTrackMatch(
-      result.data.map((item) => saavnApi.formatTrack(item)),
-      track
-    );
-    if (!matchedTrack?.candidate?.streamUrl) return null;
-
-    const saavnTrack = matchedTrack.candidate;
-    return saavnTrack?.streamUrl || null;
-  }, []);
-
   const resolvePlayableTrack = useCallback(async (track, options = {}) => {
     const { forceRefresh = false, record = true, reason = 'playback' } = options;
     if (!track) throw new Error("Track is required");
@@ -438,12 +411,7 @@ export const PlayerProvider = ({ children }) => {
       preferDirect: isNative,
     });
 
-    let streamUrl = details?.streamUrl || existingUrl || null;
-    if (!streamUrl) {
-      const saavnUrl = await trySaavnFallback(track);
-      if (saavnUrl) streamUrl = saavnUrl;
-    }
-
+    const streamUrl = details?.streamUrl || existingUrl || null;
     if (!streamUrl) throw new Error("Stream unavailable");
     const resolved = mergeResolvedTrack(track, {
       streamUrl,
@@ -473,7 +441,7 @@ export const PlayerProvider = ({ children }) => {
       }
     }
     return resolved;
-  }, [getResolvedTrackFromCache, mergeResolvedTrack, offlineOnlyMode, recordReliabilityEvent, trySaavnFallback]);
+  }, [getResolvedTrackFromCache, mergeResolvedTrack, offlineOnlyMode, recordReliabilityEvent]);
 
   /** Pre-resolve stream URL for a track (used for gapless preloading). */
   const preResolveStream = useCallback(async (track) => {
@@ -628,47 +596,6 @@ export const PlayerProvider = ({ children }) => {
           // ignore and continue to fallback
         }
 
-        try {
-          const saavnUrl = await trySaavnFallback(track);
-          if (seq !== playSeqRef.current) return;
-          if (saavnUrl && saavnUrl !== resolvedTrack?.streamUrl) {
-            const fallbackTrack = mergeResolvedTrack(track, {
-              streamUrl: saavnUrl,
-              streamSource: 'saavn-fallback',
-              cacheState: 'fallback',
-              streamResolvedAt: Date.now(),
-            });
-            await MusicPlayer.play({
-              url: saavnUrl,
-              title: fallbackTrack.title,
-              artist: fallbackTrack.artist,
-              artwork: fallbackTrack.coverArt || FALLBACK_COVER
-            });
-            if (seq !== playSeqRef.current) return;
-            persistResolvedTrack(fallbackTrack);
-            setCurrentTrack(fallbackTrack);
-            currentTrackRef.current = fallbackTrack;
-            setIsPlaying(true);
-            setPlaybackError(null);
-            clearPlaybackRecovery();
-            recordReliabilityEvent('fallback', {
-              trackId: fallbackTrack.id,
-              title: fallbackTrack.title,
-              streamSource: 'saavn-fallback',
-              message: 'Recovered playback using the Saavn fallback stream.',
-            });
-            recordReliabilityEvent('playing', {
-              trackId: fallbackTrack.id,
-              title: fallbackTrack.title,
-              streamSource: 'saavn-fallback',
-              cacheState: 'fallback',
-              message: 'Playback recovered with Saavn fallback.',
-            });
-            return;
-          }
-        } catch {
-          // ignore
-        }
       }
 
       setIsPlaying(false);
@@ -694,8 +621,7 @@ export const PlayerProvider = ({ children }) => {
     persistResolvedTrack,
     recordReliabilityEvent,
     resolvePlayableTrack,
-    schedulePlaybackRecovery,
-    trySaavnFallback
+    schedulePlaybackRecovery
   ]);
 
   /* -------------------------- PLAY SESSION -------------------------- */

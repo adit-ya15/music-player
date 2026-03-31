@@ -645,8 +645,18 @@ app.get("/api/yt/download/:videoId", async (req, res) => {
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
         return pipeUpstream(upstream, res);
     } catch (err) {
-        logger.error("download", "Download failed", { videoId, error: err?.message });
-        return res.status(500).json({ error: "Download unavailable" });
+        logger.warn("download", "Direct download stream failed; falling back to yt-dlp pipe", { videoId, error: err?.message });
+        try {
+            return await pipeYtdlpToResponse({
+                req,
+                res,
+                videoId,
+                contentDisposition: `attachment; filename="${filename}"`,
+            });
+        } catch (pipeErr) {
+            logger.error("download", "Download failed", { videoId, error: pipeErr?.message || err?.message });
+            return res.status(500).json({ error: "Download unavailable" });
+        }
     }
 });
 
@@ -877,10 +887,16 @@ app.get("/api/yt/pipe/:videoId", async (req, res) => {
     }
 
     // Strategy 2: queued yt-dlp process piping (last resort; concurrency-limited)
+    await pipeYtdlpToResponse({ req, res, videoId });
+});
+
+async function pipeYtdlpToResponse({ req, res, videoId, contentDisposition = "" }) {
     res.setHeader("Content-Type", "audio/webm");
     res.setHeader("Accept-Ranges", "none");
+    if (contentDisposition) {
+        res.setHeader("Content-Disposition", contentDisposition);
+    }
 
-    // Flush headers early so reverse proxies (Nginx) start the response immediately.
     try {
         res.flushHeaders?.();
     } catch {
@@ -963,7 +979,7 @@ app.get("/api/yt/pipe/:videoId", async (req, res) => {
             res.end();
         }
     });
-});
+}
 
 function pipeUpstream(upstream, res) {
     res.status(upstream.status);
