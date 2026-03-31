@@ -40,7 +40,7 @@ export function buildYtdlpArgs(videoId, options = {}) {
   const {
     extractorArgs = process.env.YT_EXTRACTOR_ARGS || '',
     sourceAddress = process.env.YT_SOURCE_ADDRESS,
-    playerClient = process.env.YT_PLAYER_CLIENTS || 'tv',
+    playerClient = process.env.YT_PLAYER_CLIENTS || 'mediaconnect',
     cookiesFile = process.env.YT_COOKIES_FILE,
     jsRuntimes = process.env.YT_DLP_JS_RUNTIMES || 'node',
     proxy = getYtdlpProxy(),
@@ -108,7 +108,7 @@ export async function ytdlpGetUrl(bin, videoId, options = {}) {
     logger.warn('provider.ytdlp', 'yt-dlp requires sign-in/cookies (skipping)', {
       videoId,
       code,
-      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'tv',
+      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'mediaconnect',
       hasCookies: Boolean(process.env.YT_COOKIES_FILE),
       hasProxy: Boolean(getYtdlpProxy()),
       stderr: err.slice(0, 300),
@@ -121,7 +121,7 @@ export async function ytdlpGetUrl(bin, videoId, options = {}) {
     logger.warn('provider.ytdlp', 'yt-dlp returned no URL', {
       videoId,
       code,
-      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'tv',
+      playerClient: options?.playerClient || process.env.YT_PLAYER_CLIENTS || 'mediaconnect',
       hasCookies: Boolean(process.env.YT_COOKIES_FILE),
       hasProxy: Boolean(getYtdlpProxy()),
       stderr: err.slice(0, 300),

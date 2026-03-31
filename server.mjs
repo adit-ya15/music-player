@@ -969,13 +969,13 @@ async function pipeYtdlpToResponse({ req, res, videoId, contentDisposition = "" 
             });
         });
 
-        const first = await pipeAttempt({ playerClient: "tv" });
+        const first = await pipeAttempt({ playerClient: "mediaconnect" });
         if (first.ok) {
             if (!res.writableEnded) res.end();
             return;
         }
 
-        const second = await pipeAttempt({ playerClient: "android" });
+        const second = await pipeAttempt({ playerClient: "tv" });
         if (second.ok) {
             if (!res.writableEnded) res.end();
             return;
@@ -1112,7 +1112,7 @@ app.get("/api/yt/health/extract", async (req, res) => {
     const cookiesFile = process.env.YT_COOKIES_FILE || "";
     const args = buildYtdlpArgs(videoId, {
         getUrl: true,
-        playerClient: "tv",
+        playerClient: "mediaconnect",
         extractorArgs: YT_EXTRACTOR_ARGS,
         sourceAddress: YT_SOURCE_ADDRESS,
         jsRuntimes: YT_DLP_JS_RUNTIMES,
