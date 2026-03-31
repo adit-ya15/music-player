@@ -47,7 +47,7 @@ class PlayerController extends ChangeNotifier {
       _current = track;
 
       // Resolve a direct stream URL (preferred). If it fails, fall back to backend pipe endpoint.
-      final direct = await AuraApi.streamUrl(track.id);
+      final direct = await AuraApi.streamUrl(track);
       final uri = direct != null ? Uri.parse(direct) : AuraApi.pipeUrl(track.id);
 
       await _player.setAudioSource(

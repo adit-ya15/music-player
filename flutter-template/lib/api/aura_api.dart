@@ -44,8 +44,11 @@ class AuraApi {
         .toList(growable: false);
   }
 
-  static Future<String?> streamUrl(String videoId) async {
-    final r = await http.get(_uri('/api/yt/stream/$videoId'));
+  static Future<String?> streamUrl(Track track) async {
+    final r = await http.get(_uri('/api/yt/stream/${track.id}', {
+      'title': track.title,
+      'artist': track.artist
+    }));
     if (r.statusCode != 200) return null;
     final data = jsonDecode(r.body) as Map<String, dynamic>;
     final url = (data['streamUrl'] ?? '').toString().trim();

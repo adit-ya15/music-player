@@ -208,7 +208,8 @@ async function resolveStreamWithMetaInternal({
       if (resolved?.url) metrics.increment('resolver.invidious.success');
     }
 
-    if (!resolved?.url && title) {
+    // 5) ytdl-core (often blocked by bot checks, but try it anyway)
+    if (!resolved?.url) {
       try {
         const url = await withTimeout(
           retry(quaternary, 1, {
