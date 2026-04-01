@@ -29,6 +29,7 @@ import { resolveStreamUrl, resolveStreamWithMeta } from "./backend/resolver/stre
 import { downloadToCache, getCachedFilePath, getCacheStatus } from "./backend/cache/audioCache.mjs";
 import { ytdlpQueue } from "./backend/queue/ytdlpQueue.mjs";
 import { buildYtdlpArgs, getYtdlpProxy } from "./backend/providers/ytdlpProvider.mjs";
+import { hasDabConfig } from "./backend/providers/dabProvider.mjs";
 import { spawnWithTimeout } from "./backend/lib/spawnWithTimeout.mjs";
 import { logger } from "./backend/lib/logger.mjs";
 import { metrics } from "./backend/lib/metrics.mjs";
@@ -124,6 +125,7 @@ logger.info("config", "yt-dlp runtime configuration", {
     jsRuntimes: YT_DLP_JS_RUNTIMES,
     hasCookiesFile: Boolean(process.env.YT_COOKIES_FILE),
     hasProxy: Boolean(YT_DLP_PROXY),
+    hasDab: hasDabConfig(),
     playerSkip: YT_PLAYER_SKIP,
     extractorArgs: YT_EXTRACTOR_ARGS || "",
 });
@@ -972,13 +974,13 @@ async function pipeYtdlpToResponse({ req, res, videoId, contentDisposition = "" 
             });
         });
 
-        const first = await pipeAttempt({ playerClient: "mweb" });
+        const first = await pipeAttempt({ playerClient: "tv" });
         if (first.ok) {
             if (!res.writableEnded) res.end();
             return;
         }
 
-        const second = await pipeAttempt({ playerClient: "tv" });
+        const second = await pipeAttempt({ playerClient: "mweb" });
         if (second.ok) {
             if (!res.writableEnded) res.end();
             return;
@@ -1102,6 +1104,7 @@ app.get("/api/yt/health", (req, res) => {
             hasCookiesFile: Boolean(cookiesFile),
             cookiesFileExists: cookiesFile ? fs.existsSync(cookiesFile) : false,
             hasProxy: Boolean(YT_DLP_PROXY),
+            hasDab: hasDabConfig(),
             playerSkip: YT_PLAYER_SKIP,
             extractorArgs: YT_EXTRACTOR_ARGS || "",
         },
@@ -1110,6 +1113,8 @@ app.get("/api/yt/health", (req, res) => {
 
 app.get("/api/yt/health/extract", async (req, res) => {
     const videoId = String(req.query?.videoId || "").trim();
+    const requestedClient = String(req.query?.client || "").trim();
+    const playerClient = requestedClient || "tv";
     if (!videoId) {
         return res.status(400).json({ ok: false, error: "videoId query parameter is required" });
     }
@@ -1117,7 +1122,7 @@ app.get("/api/yt/health/extract", async (req, res) => {
     const cookiesFile = process.env.YT_COOKIES_FILE || "";
     const args = buildYtdlpArgs(videoId, {
         getUrl: true,
-        playerClient: "mweb",
+        playerClient,
         extractorArgs: YT_EXTRACTOR_ARGS,
         sourceAddress: YT_SOURCE_ADDRESS,
         jsRuntimes: YT_DLP_JS_RUNTIMES,
@@ -1145,6 +1150,7 @@ app.get("/api/yt/health/extract", async (req, res) => {
         return res.json({
             ok: Boolean(url),
             videoId,
+            playerClient,
             code,
             hasUrl: Boolean(url),
             urlPreview: url ? `${url.slice(0, 120)}...` : "",
@@ -1154,6 +1160,7 @@ app.get("/api/yt/health/extract", async (req, res) => {
                 hasCookiesFile: Boolean(cookiesFile),
                 cookiesFileExists: cookiesFile ? fs.existsSync(cookiesFile) : false,
                 hasProxy: Boolean(YT_DLP_PROXY),
+                hasDab: hasDabConfig(),
                 playerSkip: YT_PLAYER_SKIP,
                 extractorArgs: YT_EXTRACTOR_ARGS || "",
             },
@@ -1163,6 +1170,7 @@ app.get("/api/yt/health/extract", async (req, res) => {
         return res.status(500).json({
             ok: false,
             videoId,
+            playerClient,
             error: error?.message || "yt-dlp health check failed",
             ytdlp: {
                 bin: YT_DLP_BIN,
@@ -1170,6 +1178,7 @@ app.get("/api/yt/health/extract", async (req, res) => {
                 hasCookiesFile: Boolean(cookiesFile),
                 cookiesFileExists: cookiesFile ? fs.existsSync(cookiesFile) : false,
                 hasProxy: Boolean(YT_DLP_PROXY),
+                hasDab: hasDabConfig(),
                 playerSkip: YT_PLAYER_SKIP,
                 extractorArgs: YT_EXTRACTOR_ARGS || "",
             },

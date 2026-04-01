@@ -3,12 +3,9 @@ import { logger } from '../lib/logger.mjs';
 import { withTimeout } from '../lib/withTimeout.mjs';
 import { dedupe } from '../lib/dedupe.mjs';
 import { metrics } from '../lib/metrics.mjs';
-import { youtubeiGetAudioUrl } from '../providers/youtubeiProvider.mjs';
-import { pipedGetAudioUrl } from '../providers/pipedProvider.mjs';
-import { ytdlCoreGetAudioUrl } from '../providers/ytdlCoreProvider.mjs';
+import { dabGetAudioUrl, hasDabConfig } from '../providers/dabProvider.mjs';
 import { soundcloudGetAudioUrl } from '../providers/soundcloudProvider.mjs';
 import { ytdlpGetUrl } from '../providers/ytdlpProvider.mjs';
-import { invidiousGetAudioUrl } from '../providers/invidiousProvider.mjs';
 import { ytdlpQueue } from '../queue/ytdlpQueue.mjs';
 import { isStreamAlive } from '../utils/validateStream.mjs';
 
@@ -20,7 +17,7 @@ const FALLBACK_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 8000)
 );
-const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'mweb,tv,android,ios')
+const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'tv,mweb,web_embedded')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
@@ -35,7 +32,6 @@ function streamKey(videoId) {
 }
 
 async function resolveStreamWithMetaInternal({
-  innertube,
   ytdlpBin,
   cache,
   videoId,
@@ -58,17 +54,8 @@ async function resolveStreamWithMetaInternal({
       metrics.increment('resolver.cache.miss');
     }
 
-    // 2) YouTubei primary (fast, no external process)
+    // 2) yt-dlp primary for YouTube playback
     const primary = async () => {
-      if (!innertube) return null;
-      const url = await youtubeiGetAudioUrl(innertube, videoId);
-      if (!url) return null;
-      // Trust primary URLs for speed; validation is reserved for cached/fallback URLs.
-      return url;
-    };
-
-    // 3) yt-dlp secondary (uses player_skip=webpage to avoid 429 on datacenter IPs)
-    const secondary = async () => {
       if (!ytdlpBin) return null;
       const now = Date.now();
       if (ytdlpCircuitOpenedAt && (now - ytdlpCircuitOpenedAt) >= YTDLP_CB_COOLDOWN_MS) {
@@ -113,29 +100,14 @@ async function resolveStreamWithMetaInternal({
       }
     };
 
-    // 4) Piped API tertiary (public instances are flaky; keep behind yt-dlp)
-    const tertiary = async () => {
-      const url = await pipedGetAudioUrl(videoId);
-      if (!url) return null;
-      return url;
+    // 3) Guarded DAB fallback (opt-in, strict title/artist matching)
+    const dabFallback = async () => {
+      if (!hasDabConfig()) return null;
+      return await dabGetAudioUrl(videoId, title, artist);
     };
 
-    // 5) Invidious API (another free YouTube frontend, separate from Piped)
-    const invidiousFallback = async () => {
-      const url = await invidiousGetAudioUrl(videoId);
-      if (!url) return null;
-      return url;
-    };
-
-    // 6) ytdl-core (often blocked by bot checks)
-    const quaternary = async () => {
-      const url = await ytdlCoreGetAudioUrl(videoId);
-      if (!url) return null;
-      return url;
-    };
-
-    // 6) SoundCloud API final fallback (best-effort only)
-    const quinary = async () => {
+    // 4) SoundCloud final fallback (non-YouTube source only)
+    const soundcloudFallback = async () => {
       const url = await soundcloudGetAudioUrl(videoId, title, artist);
       if (!url) return null;
       return url;
@@ -144,15 +116,15 @@ async function resolveStreamWithMetaInternal({
     let resolved = null;
 
     try {
-      const url = await withTimeout(
-        retry(primary, 2, {
-          delayMs: 150,
-          onError: (err) => logger.warn('resolver', 'youtubei failed', { videoId, error: err?.message }),
-        }),
-        PRIMARY_TIMEOUT_MS
-      );
-      if (url) resolved = { url, source: 'youtubei' };
-    } catch {
+        const url = await withTimeout(
+          retry(primary, 2, {
+            delayMs: 150,
+            onError: (err) => logger.warn('resolver', 'yt-dlp attempt failed', { videoId, error: err?.message }),
+          }),
+          FALLBACK_TIMEOUT_MS
+        );
+        if (url) resolved = { url, source: 'yt-dlp' };
+      } catch {
       // ignore
     }
 
@@ -163,13 +135,13 @@ async function resolveStreamWithMetaInternal({
     if (!resolved?.url) {
       try {
         const url = await withTimeout(
-          retry(secondary, 2, {
-            delayMs: 150,
-            onError: (err) => logger.warn('resolver', 'piped api attempt failed', { videoId, error: err?.message }),
+          retry(dabFallback, 1, {
+            delayMs: 0,
+            onError: (err) => logger.warn('resolver', 'dab attempt failed', { videoId, error: err?.message }),
           }),
           PRIMARY_TIMEOUT_MS
         );
-        if (url) resolved = { url, source: 'piped' };
+        if (url) resolved = { url, source: 'dab' };
       } catch {
         // ignore
       }
@@ -179,56 +151,7 @@ async function resolveStreamWithMetaInternal({
     if (!resolved?.url) {
       try {
         const url = await withTimeout(
-          retry(tertiary, 1, {
-            delayMs: 150,
-            onError: (err) => logger.warn('resolver', 'piped api attempt failed', { videoId, error: err?.message }),
-          }),
-          PRIMARY_TIMEOUT_MS
-        );
-        if (url) resolved = { url, source: 'piped' };
-      } catch {
-        // ignore
-      }
-      if (resolved?.url) metrics.increment('resolver.tertiary.success');
-    }
-
-    if (!resolved?.url) {
-      try {
-        const url = await withTimeout(
-          retry(invidiousFallback, 1, {
-            delayMs: 150,
-            onError: (err) => logger.warn('resolver', 'invidious attempt failed', { videoId, error: err?.message }),
-          }),
-          PRIMARY_TIMEOUT_MS
-        );
-        if (url) resolved = { url, source: 'invidious' };
-      } catch {
-        // ignore
-      }
-      if (resolved?.url) metrics.increment('resolver.invidious.success');
-    }
-
-    // 5) ytdl-core (often blocked by bot checks, but try it anyway)
-    if (!resolved?.url) {
-      try {
-        const url = await withTimeout(
-          retry(quaternary, 1, {
-            delayMs: 0,
-            onError: (err) => logger.warn('resolver', 'ytdl-core attempt failed', { videoId, error: err?.message }),
-          }),
-          PRIMARY_TIMEOUT_MS
-        );
-        if (url) resolved = { url, source: 'ytdl-core' };
-      } catch {
-        // ignore
-      }
-      if (resolved?.url) metrics.increment('resolver.quaternary.success');
-    }
-
-    if (!resolved?.url) {
-      try {
-        const url = await withTimeout(
-          retry(quinary, 1, {
+          retry(soundcloudFallback, 1, {
             delayMs: 0,
             onError: (err) => logger.warn('resolver', 'soundcloud attempt failed', { videoId, error: err?.message }),
           }),
