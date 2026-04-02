@@ -60,6 +60,7 @@ function collectStdout(proc, limit = 64 * 1024) {
 export function buildYtdlpArgs(videoId, options = {}) {
   const {
     extractorArgs = process.env.YT_EXTRACTOR_ARGS || '',
+    format = process.env.YT_DLP_FORMAT || 'bestaudio',
     sourceAddress = process.env.YT_SOURCE_ADDRESS,
     playerClient = process.env.YT_PLAYER_CLIENTS || 'tv',
     cookiesFile = process.env.YT_COOKIES_FILE,
@@ -72,7 +73,7 @@ export function buildYtdlpArgs(videoId, options = {}) {
   } = options;
 
   // Important: avoid reading machine/user-level yt-dlp config (it can force cookies).
-  const args = ['--ignore-config', '-f', 'bestaudio', '--no-playlist'];
+  const args = ['--ignore-config', '-f', format, '--no-playlist'];
 
   // Optional plugin dirs (e.g., bundled PO token provider).
   for (const pluginDir of splitCsv(pluginDirs)) {

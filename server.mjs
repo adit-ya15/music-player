@@ -867,27 +867,33 @@ app.get("/api/yt/pipe/:videoId", async (req, res) => {
 });
 
 async function pipeYtdlpToResponse({ req, res, videoId, contentDisposition = "" }) {
-    res.setHeader("Content-Type", "audio/webm");
-    res.setHeader("Accept-Ranges", "none");
-    if (contentDisposition) {
-        res.setHeader("Content-Disposition", contentDisposition);
-    }
-
-    try {
-        res.flushHeaders?.();
-    } catch {
-        // ignore
-    }
-
     const startTimeoutMs = Math.max(1000, Number(process.env.YTDLP_PIPE_START_TIMEOUT_MS || 8000));
 
     await ytdlpQueue.add(async () => {
+        let headersCommitted = false;
+
+        const commitHeaders = (contentType) => {
+            if (headersCommitted || res.headersSent) return;
+            res.setHeader("Content-Type", contentType || "audio/mp4");
+            res.setHeader("Accept-Ranges", "none");
+            if (contentDisposition) {
+                res.setHeader("Content-Disposition", contentDisposition);
+            }
+            try {
+                res.flushHeaders?.();
+            } catch {
+                // ignore
+            }
+            headersCommitted = true;
+        };
+
         const pipeAttempt = (opts) => new Promise((resolve) => {
             const args = buildYtdlpArgs(videoId, {
                 extractorArgs: YT_EXTRACTOR_ARGS,
+                format: opts.format,
                 sourceAddress: YT_SOURCE_ADDRESS,
                 outputToStdout: true,
-                ...opts,
+                playerClient: opts.playerClient,
             });
 
             const { proc } = spawnWithTimeout(
@@ -908,6 +914,13 @@ async function pipeYtdlpToResponse({ req, res, videoId, contentDisposition = "" 
                 if (!hasData) {
                     hasData = true;
                     clearTimeout(startTimer);
+                    commitHeaders(opts.contentType);
+                    logger.info("pipe", "yt-dlp pipe started streaming", {
+                        videoId,
+                        playerClient: opts.playerClient,
+                        contentType: opts.contentType,
+                        format: opts.format,
+                    });
                 }
                 if (!res.writableEnded) res.write(chunk);
             });
@@ -936,20 +949,41 @@ async function pipeYtdlpToResponse({ req, res, videoId, contentDisposition = "" 
             });
         });
 
-        const first = await pipeAttempt({ playerClient: "tv" });
+        const first = await pipeAttempt({
+            playerClient: "mweb",
+            format: "bestaudio[ext=m4a]/bestaudio[acodec*=mp4a]/bestaudio[ext=mp4]/bestaudio",
+            contentType: "audio/mp4",
+        });
         if (first.ok) {
             if (!res.writableEnded) res.end();
             return;
         }
 
-        const second = await pipeAttempt({ playerClient: "mweb" });
+        const second = await pipeAttempt({
+            playerClient: "tv",
+            format: "bestaudio[ext=m4a]/bestaudio[acodec*=mp4a]/bestaudio[ext=mp4]/bestaudio",
+            contentType: "audio/mp4",
+        });
         if (second.ok) {
             if (!res.writableEnded) res.end();
             return;
         }
 
+        const third = await pipeAttempt({
+            playerClient: "mweb",
+            format: "bestaudio[ext=webm]/bestaudio",
+            contentType: "audio/webm",
+        });
+        if (third.ok) {
+            if (!res.writableEnded) res.end();
+            return;
+        }
+
         if (!res.headersSent) {
-            logger.error("pipe", "yt-dlp pipe failed", { videoId, stderr: (second.stderr || first.stderr || '').slice(0, 500) });
+            logger.error("pipe", "yt-dlp pipe failed", {
+                videoId,
+                stderr: (third.stderr || second.stderr || first.stderr || '').slice(0, 500),
+            });
             res.status(502).json({ error: "Stream unavailable" });
         } else {
             res.end();
