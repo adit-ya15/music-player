@@ -97,7 +97,7 @@ public class MusicPlugin extends Plugin {
     @PluginMethod
     public void play(PluginCall call) {
         String url = call.getString("url");
-        String title = call.getString("title", "Aura Music");
+        String title = call.getString("title", "Null");
         String artist = call.getString("artist", "Unknown Artist");
         String artwork = call.getString("artwork", "");
 

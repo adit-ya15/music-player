@@ -1,0 +1,17 @@
+{
+  "name": "Null",
+  "short_name": "Null",
+  "description": "Null is a resilient music player with smart fallback streaming, offline playback, and synced lyrics.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/null-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

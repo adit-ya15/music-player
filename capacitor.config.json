@@ -1,6 +1,6 @@
 {
   "appId": "com.aura.music",
-  "appName": "Aura Music",
+  "appName": "Null",
   "webDir": "dist",
   "server": {
     "androidScheme": "http",

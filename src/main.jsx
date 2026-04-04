@@ -3,10 +3,11 @@ import ReactDOM from 'react-dom/client';
 import { Capacitor } from '@capacitor/core';
 import App from './App.jsx';
 import { PlayerProvider } from './context/PlayerContext.jsx';
+import BootSequence from './components/BootSequence.jsx';
 import './index.css';
 
 // Default to dark (Apple Music style). Persist user preference.
-const savedTheme = localStorage.getItem('aura-theme') || 'dark';
+const savedTheme = localStorage.getItem('null-theme') || localStorage.getItem('aura-theme') || 'dark';
 document.documentElement.dataset.theme = savedTheme;
 
 // Global error handlers — show crash info on screen so we can debug black-screen issues
@@ -49,9 +50,11 @@ if (Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <PlayerProvider>
-        <App />
-      </PlayerProvider>
+      <BootSequence>
+        <PlayerProvider>
+          <App />
+        </PlayerProvider>
+      </BootSequence>
     </ErrorBoundary>
   </React.StrictMode>,
 );

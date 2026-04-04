@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Aura Music</string>
-    <string name="title_activity_main">Aura Music</string>
+    <string name="app_name">Null</string>
+    <string name="title_activity_main">Null</string>
     <string name="package_name">com.aura.music</string>
     <string name="custom_url_scheme">com.aura.music</string>
-    <string name="widget_description">Aura Music now playing controls</string>
+    <string name="widget_description">Null now playing controls</string>
 </resources>

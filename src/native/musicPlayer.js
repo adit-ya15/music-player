@@ -80,7 +80,7 @@ function createWebMusicPlayer() {
   }
 
   return {
-    async play({ url, title = 'Aura Music', artist = 'Unknown Artist', artwork = '' } = {}) {
+    async play({ url, title = 'Null', artist = 'Unknown Artist', artwork = '' } = {}) {
       if (!url) {
         throw new Error('Track URL is required');
       }

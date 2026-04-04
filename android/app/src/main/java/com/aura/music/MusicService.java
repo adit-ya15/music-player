@@ -50,7 +50,7 @@ public class MusicService extends Service {
     
     private static final String CHANNEL_ID = "MusicPlaybackChannel";
     private static final int NOTIFICATION_ID = 1;
-    private static final String WIDGET_EMPTY_TITLE = "Aura Music";
+    private static final String WIDGET_EMPTY_TITLE = "Null";
     private static final String WIDGET_EMPTY_ARTIST = "Play something you like";
 
     private static final String HTTP_UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36";
@@ -60,7 +60,7 @@ public class MusicService extends Service {
 
     private ExoPlayer player;
     private MediaSessionCompat mediaSession;
-    private String currentTitle = "Aura Music";
+    private String currentTitle = "Null";
     private String currentArtist = "Unknown Artist";
     private String currentArtwork = "";
 
@@ -204,7 +204,7 @@ public class MusicService extends Service {
             }
         });
 
-        mediaSession = new MediaSessionCompat(this, "AuraMusicSession");
+        mediaSession = new MediaSessionCompat(this, "NullSession");
         mediaSession.setFlags(
             MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
             MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS

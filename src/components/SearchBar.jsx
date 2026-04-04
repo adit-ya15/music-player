@@ -17,6 +17,36 @@ export default function SearchBar({ onSearch }) {
   const allowSuggestionsRef = useRef(true);
   const suggestionCacheRef = useRef(new Map());
 
+  const normalizeSuggestion = useCallback((item, index) => {
+    if (!item) return null;
+
+    if (typeof item === 'string') {
+      const title = item.trim();
+      if (!title) return null;
+      return {
+        id: `query-${title}-${index}`,
+        title,
+        type: 'query',
+        description: '',
+        image: '',
+      };
+    }
+
+    const title = String(item.title || item.text || item.query || '').trim();
+    if (!title) return null;
+
+    const rawType = String(item.type || 'query').toLowerCase();
+    const type = rawType === 'song' || rawType === 'album' || rawType === 'artist' ? rawType : 'query';
+
+    return {
+      id: String(item.id || `${type}-${title}-${index}`),
+      title,
+      type,
+      description: String(item.description || '').trim(),
+      image: String(item.image || '').trim(),
+    };
+  }, []);
+
   const fetchSuggestions = useCallback((q, options = {}) => {
     const { force = false } = options;
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -62,12 +92,13 @@ export default function SearchBar({ onSearch }) {
       const merged = [
         ...(saavnRes.data || []).slice(0, 5),
         ...(ytRes.data || []).slice(0, 5),
-      ];
+      ].map((item, index) => normalizeSuggestion(item, index)).filter(Boolean);
 
       const unique = [];
       const titles = new Set();
       for (const item of merged) {
-        const lowerTitle = item.title?.toLowerCase();
+        const lowerTitle = String(item.title || '').toLowerCase();
+        if (!lowerTitle) continue;
         if (!titles.has(lowerTitle)) {
           titles.add(lowerTitle);
           unique.push(item);
@@ -86,7 +117,7 @@ export default function SearchBar({ onSearch }) {
       setShowSuggestions(true);
       setSelectedIdx(-1);
     }, 300);
-  }, []);
+  }, [normalizeSuggestion]);
 
   useEffect(() => {
     fetchSuggestions(query);

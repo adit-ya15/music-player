@@ -201,7 +201,10 @@ function App() {
   const [radioLoading, setRadioLoading] = useState(null);
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem('aura-theme') || document.documentElement.dataset.theme || 'dark';
+      return localStorage.getItem('null-theme')
+        || localStorage.getItem('aura-theme')
+        || document.documentElement.dataset.theme
+        || 'dark';
     } catch {
       return document.documentElement.dataset.theme || 'dark';
     }
@@ -220,6 +223,7 @@ function App() {
   const [favorites, setFavorites] = useLocalStorage('aura-favorites', []);
   const [playlists, setPlaylists] = useLocalStorage('aura-playlists', []);
   const [history, setHistory] = useLocalStorage('aura-history', []);
+  const [searchHistory, setSearchHistory] = useLocalStorage('aura-search-history', []);
   const [searchCache, setSearchCache] = useState({});
   const [playlistSubOpen, setPlaylistSubOpen] = useState(false);
   const [authSession, setAuthSession] = useState(() => getStoredAuthSession());
@@ -347,7 +351,7 @@ function App() {
     setTheme((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = next;
-      localStorage.setItem('aura-theme', next);
+      localStorage.setItem('null-theme', next);
       return next;
     });
   }, []);
@@ -977,6 +981,7 @@ function App() {
     setActiveTab('search');
     const term = query.trim();
     if (!term) { setSearchResults([]); setSearchError(null); return; }
+    rememberSearchTerm(term);
     if (!force && searchCache[term]) { setSearchResults(searchCache[term]); setSearchError(null); return; }
     setIsSearchLoading(true);
     setSearchError(null);
@@ -986,16 +991,31 @@ function App() {
         jamendoApi.searchSongsSafe(term, 12),
       ]);
 
-      if (!ytRes.ok && !jamendoRes.ok) {
+      const combined = dedupeTracks([
+        ...(ytRes.ok ? (ytRes.data || []) : []),
+        ...(jamendoRes.ok ? (jamendoRes.data || []) : []),
+      ]).slice(0, 80);
+
+      if (!combined.length) {
+        const normalized = term.toLowerCase();
+        const localFallback = searchTrackPool.filter((track) => (
+          matchesSearchQuery(track.title, normalized)
+          || matchesSearchQuery(track.artist, normalized)
+          || matchesSearchQuery(track.album, normalized)
+        )).slice(0, 40);
+
+        if (localFallback.length) {
+          setSearchResults(localFallback);
+          setSearchCache((prev) => ({ ...prev, [term]: localFallback }));
+          setSearchError(null);
+          return;
+        }
+
         setSearchResults([]);
         setSearchError(ytRes.error || jamendoRes.error || 'Search unavailable.');
         return;
       }
 
-      const combined = onlyYoutube([
-        ...(ytRes.ok ? (ytRes.data || []) : []),
-        ...(jamendoRes.ok ? (jamendoRes.data || []) : []),
-      ]);
       setSearchResults(combined);
       setSearchCache((prev) => ({ ...prev, [term]: combined }));
     } catch (error) {
@@ -1003,7 +1023,7 @@ function App() {
       setSearchResults([]);
       setSearchError('Search unavailable.');
     } finally { setIsSearchLoading(false); }
-  }, [searchCache]);
+  }, [rememberSearchTerm, searchCache, searchTrackPool]);
 
   const openAuthModal = useCallback((mode = 'login') => {
     setAuthError('');
@@ -1537,7 +1557,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `aura-library-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `null-library-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -1675,6 +1695,61 @@ function App() {
     ));
   }, [playlists, searchQuery]);
 
+  const recentSearchTerms = useMemo(() => (
+    (Array.isArray(searchHistory) ? searchHistory : [])
+      .map((term) => String(term || '').trim())
+      .filter(Boolean)
+      .slice(0, 8)
+  ), [searchHistory]);
+
+  const recentSearchTracks = useMemo(() => {
+    const collected = [];
+    const seen = new Set();
+
+    for (const term of recentSearchTerms) {
+      const normalized = term.toLowerCase();
+      const cachedTracks = Array.isArray(searchCache[term]) ? searchCache[term] : [];
+      const fallbackTracks = cachedTracks.length
+        ? cachedTracks
+        : searchTrackPool.filter((track) => (
+          matchesSearchQuery(track.title, normalized)
+          || matchesSearchQuery(track.artist, normalized)
+          || matchesSearchQuery(track.album, normalized)
+        )).slice(0, 6);
+
+      for (const track of fallbackTracks) {
+        const key = getTrackSourceId(track) || track?.id;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        collected.push(track);
+        if (collected.length >= 20) return collected;
+      }
+    }
+
+    return collected;
+  }, [recentSearchTerms, searchCache, searchTrackPool]);
+
+  const rememberSearchTerm = useCallback((term) => {
+    const normalized = String(term || '').trim();
+    if (!normalized) return;
+
+    setSearchHistory((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const next = [normalized, ...current.filter((item) => String(item || '').toLowerCase() !== normalized.toLowerCase())];
+      return next.slice(0, 12);
+    });
+  }, [setSearchHistory]);
+
+  const clearSearchHistory = useCallback(() => {
+    setSearchHistory([]);
+  }, [setSearchHistory]);
+
+  const removeSearchHistoryTerm = useCallback((term) => {
+    const normalized = String(term || '').trim().toLowerCase();
+    if (!normalized) return;
+    setSearchHistory((prev) => (Array.isArray(prev) ? prev : []).filter((item) => String(item || '').trim().toLowerCase() !== normalized));
+  }, [setSearchHistory]);
+
   const handlePlayAll = useCallback((tracks) => {
     const playableTracks = buildPlayableQueue(tracks);
     if (playableTracks.length > 0) playTrack(playableTracks[0], playableTracks);
@@ -1751,8 +1826,8 @@ function App() {
     const playableQueue = buildPlayableQueue(displayed);
     if (displayed.length === 0) return null;
     return (
-      <section className="track-section" style={{ padding: 0 }}>
-        <div className="section-header" style={{ padding: '0 16px' }}>
+      <section className="track-section track-section--horizontal">
+        <div className="section-header">
           <h2>{title}</h2>
         </div>
         <div className="horizontal-scroll">
@@ -2087,7 +2162,7 @@ function App() {
     <section className="settings-panel">
       <div className="settings-hero">
         <div>
-          <p className="settings-eyebrow">Aura Music</p>
+          <p className="settings-eyebrow">Null</p>
           <h2>Settings &amp; About</h2>
           <p>Playback polish, offline controls, and the release notes that make the project easier to ship and easier to contribute to.</p>
         </div>
@@ -2612,8 +2687,46 @@ function App() {
                 {!isSearchLoading && searchQuery && searchFilter === 'albums' && renderSearchCollection(matchingAlbums, `Albums for "${searchQuery}"`, 'albums')}
                 {!isSearchLoading && searchQuery && searchFilter === 'playlists' && renderSearchCollection(matchingPlaylists, `Playlists for "${searchQuery}"`, 'playlists')}
 
-                {/* Browse suggestions when empty */}
-                {!searchQuery && topTracks.length > 0 && renderTrackList(topTracks.slice(0, 10), 'Trending')}
+                {!searchQuery && recentSearchTerms.length > 0 && (
+                  <section className="track-section">
+                    <div className="section-header">
+                      <h2>Recent Searches</h2>
+                      <button className="section-action-btn" onClick={clearSearchHistory} type="button">
+                        Clear
+                      </button>
+                    </div>
+                    <div className="search-history-chip-row">
+                      {recentSearchTerms.map((term) => (
+                        <div key={term} className="search-history-chip">
+                          <button
+                            className="settings-chip"
+                            onClick={() => handleSearch(term, { force: true })}
+                            type="button"
+                          >
+                            {term}
+                          </button>
+                          <button
+                            className="search-history-remove"
+                            onClick={() => removeSearchHistoryTerm(term)}
+                            aria-label={`Remove ${term} from search history`}
+                            title="Remove"
+                            type="button"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {!searchQuery && recentSearchTracks.length > 0 && renderTrackList(recentSearchTracks, 'From your previous searches', {
+                  showActions: false,
+                  playMode: 'radio',
+                  filterYoutubeOnly: false,
+                })}
+
+                {!searchQuery && recentSearchTracks.length === 0 && topTracks.length > 0 && renderTrackList(topTracks.slice(0, 10), 'Trending')}
               </>
             )}
 

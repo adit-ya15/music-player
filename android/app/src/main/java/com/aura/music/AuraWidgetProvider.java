@@ -13,7 +13,7 @@ public class AuraWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
         for (int appWidgetId : appWidgetIds) {
-            appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, "Aura Music", "Play something you like", false));
+            appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, "Null", "Play something you like", false));
         }
     }
 
@@ -32,7 +32,7 @@ public class AuraWidgetProvider extends AppWidgetProvider {
     private static RemoteViews buildViews(Context context, String title, String artist, boolean isPlaying) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_aura_music);
 
-        views.setTextViewText(R.id.widget_title, title != null ? title : "Aura Music");
+        views.setTextViewText(R.id.widget_title, title != null ? title : "Null");
         views.setTextViewText(R.id.widget_artist, artist != null ? artist : "Play something you like");
         views.setImageViewResource(
             R.id.widget_play_pause,
