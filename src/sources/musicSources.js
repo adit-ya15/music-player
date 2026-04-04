@@ -15,11 +15,6 @@ export function createMusicSources({ youtubeApi, jamendoApi }) {
       const videoId = normalizeVideoId(track);
       if (!videoId) return null;
 
-      const monochrome = await resolveMonochromeStream(videoId);
-      if (monochrome?.streamUrl) {
-        return monochrome;
-      }
-
       const details = await youtubeApi.getStreamDetails(videoId, { preferDirect: true });
       const streamUrl = typeof details?.streamUrl === 'string' ? details.streamUrl.trim() : '';
       if (streamUrl) {
@@ -29,6 +24,14 @@ export function createMusicSources({ youtubeApi, jamendoApi }) {
           cacheState: details?.cacheState || null,
           verified: Boolean(details?.verified),
         };
+      }
+
+      const monochrome = await resolveMonochromeStream(videoId, {
+        title: track?.title,
+        artist: track?.artist,
+      });
+      if (monochrome?.streamUrl) {
+        return monochrome;
       }
 
       return null;
@@ -43,7 +46,10 @@ export function createMusicSources({ youtubeApi, jamendoApi }) {
     async getStreamUrl(track) {
       const videoId = normalizeVideoId(track);
       if (!videoId) return null;
-      return resolveMonochromeStream(videoId);
+      return resolveMonochromeStream(videoId, {
+        title: track?.title,
+        artist: track?.artist,
+      });
     },
   };
 

@@ -1,20 +1,20 @@
 import { logInfo } from '../utils/logger.js';
 
 const DEFAULT_TIMEOUT_MS = 6500;
-const MAX_CANDIDATES = 12;
+const MAX_CANDIDATES = 40;
 const DEFAULT_MONOCHROME_ENDPOINTS = [
-  'https://mono-01.nullapp.dev/{videoId}',
-  'https://mono-02.nullapp.dev/{videoId}',
-  'https://mono-03.nullapp.dev/{videoId}',
-  'https://mono-04.nullapp.dev/{videoId}',
-  'https://mono-05.nullapp.dev/{videoId}',
-  'https://mono-06.nullapp.dev/{videoId}',
-  'https://mono-07.nullapp.dev/{videoId}',
-  'https://mono-08.nullapp.dev/{videoId}',
-  'https://mono-09.nullapp.dev/{videoId}',
-  'https://mono-10.nullapp.dev/{videoId}',
-  'https://mono-11.nullapp.dev/{videoId}',
-  'https://mono-12.nullapp.dev/{videoId}',
+  'https://monochrome-api.samidy.com',
+  'https://api.monochrome.tf',
+  'https://hifi.geeked.wtf',
+  'https://wolf.qqdl.site',
+  'https://maus.qqdl.site',
+  'https://vogel.qqdl.site',
+  'https://katze.qqdl.site',
+  'https://hund.qqdl.site',
+  'https://tidal.kinoplus.online',
+  'https://tidal-uptime.jiffy-puffs-1j.workers.dev',
+  'https://tidal-uptime.props-76styles.workers.dev',
+  '/api/yt/stream/{videoId}',
 ];
 
 const latencyState = new Map();
@@ -35,6 +35,11 @@ function splitCsv(value = '') {
 
 function normalizeBaseUrl(value) {
   return String(value || '').replace(/\/+$/, '');
+}
+
+function looksLikeManifestUrl(value = '') {
+  const url = String(value || '').toLowerCase();
+  return url.includes('.mpd') || url.includes('.m3u8') || url.includes('/manifests/');
 }
 
 function withTimeout(promiseFactory, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -63,6 +68,13 @@ function extractStreamUrl(payload) {
   return direct ? direct.trim() : '';
 }
 
+function extractApiHosts(payload) {
+  const items = Array.isArray(payload?.api) ? payload.api : [];
+  return items
+    .map((item) => (typeof item?.url === 'string' ? item.url.trim() : ''))
+    .filter((url) => /^https?:\/\//i.test(url));
+}
+
 async function resolveFromEndpoint(endpointUrl, timeoutMs) {
   return withTimeout(async (signal) => {
     const response = await fetch(endpointUrl, {
@@ -81,6 +93,12 @@ async function resolveFromEndpoint(endpointUrl, timeoutMs) {
 
     if (contentType.includes('application/json')) {
       const payload = await response.json();
+      const apiHosts = extractApiHosts(payload);
+      if (apiHosts.length) {
+        const error = new Error('Monochrome API index payload');
+        error.apiHosts = apiHosts;
+        throw error;
+      }
       const streamUrl = extractStreamUrl(payload);
       if (!streamUrl) throw new Error('No stream URL in JSON payload');
       return streamUrl;
@@ -106,7 +124,13 @@ async function verifyStreamUrl(streamUrl, timeoutMs = 5000) {
       if (!headResponse.ok) return false;
       const contentType = String(headResponse.headers.get('content-type') || '').toLowerCase();
       if (!contentType) return true;
-      return contentType.startsWith('audio/') || contentType.includes('octet-stream') || contentType.includes('application/vnd.apple.mpegurl');
+      return (
+        contentType.startsWith('audio/') ||
+        contentType.includes('octet-stream') ||
+        contentType.includes('application/vnd.apple.mpegurl') ||
+        contentType.includes('application/dash+xml') ||
+        looksLikeManifestUrl(streamUrl)
+      );
     }, timeoutMs);
 
     if (ok) return true;
@@ -131,11 +155,70 @@ async function verifyStreamUrl(streamUrl, timeoutMs = 5000) {
   }
 }
 
+function pickManifestUri(payload) {
+  return [
+    payload?.data?.data?.attributes?.uri,
+    payload?.data?.attributes?.uri,
+    payload?.attributes?.uri,
+    payload?.uri,
+    payload?.data?.uri,
+  ].find((value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim())) || '';
+}
+
+async function resolveFromHifiApiBase(baseUrl, context, timeoutMs) {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!/^https?:\/\//i.test(base)) return '';
+
+  const query = String(context?.query || `${context?.title || ''} ${context?.artist || ''}` || '').trim();
+  if (!query) return '';
+
+  const searchUrl = `${base}/search/?s=${encodeURIComponent(query)}&limit=5`;
+  const searchResp = await withTimeout(async (signal) => {
+    return fetch(searchUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+      },
+      signal,
+    });
+  }, timeoutMs);
+
+  if (!searchResp.ok) return '';
+  const searchPayload = await searchResp.json();
+  const items = Array.isArray(searchPayload?.data?.items) ? searchPayload.data.items : [];
+  const chosen = items.find((item) => Number(item?.id) > 0 && item?.allowStreaming !== false) || items[0];
+  const trackId = chosen?.id;
+  if (!trackId) return '';
+
+  const manifestUrl = `${base}/trackManifests/?id=${encodeURIComponent(trackId)}&formats=HEAACV1`;
+  const manifestResp = await withTimeout(async (signal) => {
+    return fetch(manifestUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+      },
+      signal,
+    });
+  }, timeoutMs);
+
+  if (!manifestResp.ok) return '';
+  const manifestPayload = await manifestResp.json();
+  const uri = pickManifestUri(manifestPayload).trim();
+  if (!uri) return '';
+
+  const verified = await verifyStreamUrl(uri, timeoutMs);
+  return verified ? uri : '';
+}
+
 function buildCandidates(videoId, endpointsCsv) {
   const envEndpoints = import.meta?.env?.VITE_MONOCHROME_ENDPOINTS || '';
-  const rawEndpoints = splitCsv(endpointsCsv || envEndpoints || '').length
-    ? splitCsv(endpointsCsv || envEndpoints || '')
-    : DEFAULT_MONOCHROME_ENDPOINTS;
+  const configured = splitCsv(endpointsCsv || envEndpoints || '');
+  const hasWindowRuntime = typeof window !== 'undefined';
+  const rawEndpoints = configured.length
+    ? configured
+    : hasWindowRuntime
+      ? DEFAULT_MONOCHROME_ENDPOINTS
+      : [];
 
   const candidates = [];
   for (const endpoint of rawEndpoints) {
@@ -147,6 +230,7 @@ function buildCandidates(videoId, endpointsCsv) {
     const base = normalizeBaseUrl(endpoint);
     if (!base) continue;
 
+    candidates.push(base);
     candidates.push(`${base}/stream/${encodeURIComponent(videoId)}`);
     candidates.push(`${base}/api/stream/${encodeURIComponent(videoId)}`);
     candidates.push(`${base}/resolve/${encodeURIComponent(videoId)}`);
@@ -161,9 +245,58 @@ function buildCandidates(videoId, endpointsCsv) {
   return unique;
 }
 
-async function probeEndpoint(endpointUrl, timeoutMs) {
+async function probeEndpoint(endpointUrl, videoId, timeoutMs, context = {}) {
   const startedAt = nowMs();
-  const streamUrl = await resolveFromEndpoint(endpointUrl, timeoutMs);
+  let streamUrl;
+
+  try {
+    streamUrl = await resolveFromEndpoint(endpointUrl, timeoutMs);
+  } catch (error) {
+    const apiHosts = Array.isArray(error?.apiHosts) ? error.apiHosts : [];
+    if (apiHosts.length) {
+      for (const host of apiHosts) {
+        const base = normalizeBaseUrl(host);
+        if (!base) continue;
+
+        try {
+          streamUrl = await resolveFromHifiApiBase(base, context, timeoutMs);
+        } catch {
+          streamUrl = '';
+        }
+
+        if (streamUrl) break;
+
+        const variants = [
+          `${base}/stream/${encodeURIComponent(videoId)}`,
+          `${base}/api/stream/${encodeURIComponent(videoId)}`,
+          `${base}/resolve/${encodeURIComponent(videoId)}`,
+        ];
+
+        for (const variant of variants) {
+          try {
+            streamUrl = await resolveFromEndpoint(variant, timeoutMs);
+            if (streamUrl) break;
+          } catch {
+            // continue probing derived hosts
+          }
+        }
+
+        if (streamUrl) break;
+      }
+
+      if (!streamUrl) {
+        throw new Error('No stream URL from Monochrome API index hosts');
+      }
+    } else {
+      const endpointLooksLikeBase = /^https?:\/\//i.test(endpointUrl) && !endpointUrl.includes('/stream/') && !endpointUrl.includes('/resolve/') && !endpointUrl.includes('{videoId}');
+      if (!endpointLooksLikeBase) throw error;
+
+      streamUrl = await resolveFromHifiApiBase(endpointUrl, context, timeoutMs);
+      if (!streamUrl) {
+        throw error;
+      }
+    }
+  }
 
   const verified = await verifyStreamUrl(streamUrl);
   if (!verified) {
@@ -189,7 +322,16 @@ export async function resolveMonochromeStream(videoId, options = {}) {
   if (!candidates.length) return null;
 
   const timeoutMs = Math.max(1200, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS));
-  const probes = candidates.map((endpointUrl) => probeEndpoint(endpointUrl, timeoutMs));
+  const context = {
+    query: String(options.query || '').trim(),
+    title: String(options.title || '').trim(),
+    artist: String(options.artist || '').trim(),
+  };
+  if (!context.query) {
+    context.query = `${context.title} ${context.artist}`.trim() || videoId;
+  }
+
+  const probes = candidates.map((endpointUrl) => probeEndpoint(endpointUrl, videoId, timeoutMs, context));
 
   try {
     const best = await Promise.any(probes);

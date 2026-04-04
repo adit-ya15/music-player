@@ -90,6 +90,8 @@ Important environment variables:
 - `REDIS_URL`: optional Redis cache for production reliability
 - `YT_DLP_BIN`: path to `yt-dlp`
 - `YT_COOKIES_FILE`: optional absolute path to a local cookies export kept outside the repo
+- `YTDLP_AUTO_UPDATE_ENABLED`: enables background yt-dlp self-updates (default weekly)
+- `YTDLP_AUTO_UPDATE_INTERVAL_MS`: update cadence in milliseconds (default: 7 days)
 
 ## Production Notes
 

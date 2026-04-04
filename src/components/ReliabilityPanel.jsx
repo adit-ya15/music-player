@@ -22,7 +22,6 @@ const getUrlKind = (url = '', source = '') => {
   if (url.includes('/api/yt/cache/')) return 'disk-cache';
   if (source === 'monochrome') return 'monochrome';
   if (source === 'jamendo') return 'jamendo';
-  if (source === 'soundcloud') return 'soundcloud';
   if (source === 'yt-dlp') return 'yt-dlp';
   if (source === 'downloaded') return 'downloaded';
   return 'remote';

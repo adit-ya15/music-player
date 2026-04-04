@@ -31,6 +31,7 @@ import { buildYtdlpArgs, getYtdlpProxy } from "./backend/providers/ytdlpProvider
 import { spawnWithTimeout } from "./backend/lib/spawnWithTimeout.mjs";
 import { logger } from "./backend/lib/logger.mjs";
 import { metrics } from "./backend/lib/metrics.mjs";
+import { scheduleYtdlpAutoUpdate } from "./backend/lib/ytdlpAutoUpdate.mjs";
 import { getRecommendations, trackUserAction } from "./backend/reco/recommendations.mjs";
 import { normalizeLibraryPayload } from "./shared/userLibrary.js";
 
@@ -1308,6 +1309,8 @@ app.get(/^(?!\/api).*/, (req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Aura server running on port ${PORT}`);
+
+    scheduleYtdlpAutoUpdate(YT_DLP_BIN);
 
     getYT().catch((err) =>
         console.error("Session init error:", err.message)

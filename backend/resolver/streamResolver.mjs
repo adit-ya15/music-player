@@ -21,6 +21,7 @@ const FALLBACK_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 20000)
 );
+const ENABLE_YT_FALLBACKS = String(process.env.ENABLE_YT_FALLBACKS || '').trim().toLowerCase() === 'true';
 const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'android,ios,mweb')
   .split(',')
   .map((value) => value.trim())
@@ -204,7 +205,7 @@ async function resolveStreamWithMetaInternal({
       metrics.increment('resolver.primary.success');
     }
 
-    const fallbacks = [
+    const fallbacks = ENABLE_YT_FALLBACKS ? [
       {
         name: 'saavn',
         metric: 'resolver.secondary.success',
@@ -235,7 +236,11 @@ async function resolveStreamWithMetaInternal({
         fn: invidiousFallback,
         timeoutMs: QUICK_FALLBACK_TIMEOUT_MS,
       },
-    ];
+    ] : [];
+
+    if (!ENABLE_YT_FALLBACKS) {
+      logger.info('resolver', 'Non-yt-dlp fallbacks are disabled (yt-dlp only mode)', { videoId });
+    }
 
     for (const fallback of fallbacks) {
       if (resolved?.url) break;
