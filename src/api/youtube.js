@@ -1,5 +1,6 @@
 import { friendlyErrorMessage, logError } from '../utils/logger';
 import { getConfiguredEndpoints, requestFromEndpoints, validateStreamUrl } from './endpointClient';
+import { buildApiUrl } from './apiBase';
 
 const decodeHtml = (value) =>
   String(value || '')
@@ -58,10 +59,7 @@ const pickAlbum = (ytSong) =>
   pickText(ytSong?.album?.name, ytSong?.album?.text, ytSong?.album) || '';
 
 function localApiEndpointFallback() {
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/api`;
-  }
-  return '';
+  return buildApiUrl('');
 }
 
 const YOUTUBE_ENDPOINTS = getConfiguredEndpoints('VITE_YOUTUBE_ENDPOINTS', localApiEndpointFallback());
