@@ -246,6 +246,7 @@ function App() {
     resumePlayback,
     clearResumeState,
     recordTasteSignal,
+    preResolveStream,
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState('home');
@@ -1132,12 +1133,17 @@ function App() {
 
       setSearchResults(combined);
       setSearchCache((prev) => ({ ...prev, [term]: combined }));
+
+      if (combined.length > 0) {
+        const warmTargets = combined.filter((track) => track?.source === 'youtube').slice(0, 3);
+        void Promise.all(warmTargets.map((track) => preResolveStream(track))).catch(() => {});
+      }
     } catch (error) {
       logError('app.handleSearch', error);
       setSearchResults([]);
       setSearchError('Search unavailable.');
     } finally { setIsSearchLoading(false); }
-  }, [downloadedTracks, favorites, history, playlists, rememberSearchTerm, searchCache, searchResults]);
+  }, [downloadedTracks, favorites, history, playlists, preResolveStream, rememberSearchTerm, searchCache, searchResults]);
 
   const openAuthModal = useCallback((mode = 'login') => {
     setAuthError('');
@@ -2059,6 +2065,11 @@ function App() {
                 isFav={isTrackFavorite(track)}
                 isDownloaded={isTrackDownloaded(track)}
                 onPlay={(t) => playTrack(resolvePlayableTrack(t), playableQueue, { mode: playMode })}
+                onWarm={(t) => {
+                  if (t?.source === 'youtube') {
+                    void preResolveStream(t).catch(() => {});
+                  }
+                }}
                 onFav={toggleFavorite}
                 onContextMenu={(e, t) => handleTrackContextMenu(e, t, displayed)}
                 variant={variant}
@@ -2090,6 +2101,11 @@ function App() {
               isFav={isTrackFavorite(track)}
               isDownloaded={isTrackDownloaded(track)}
               onPlay={(t) => playTrack(resolvePlayableTrack(t), playableQueue, { mode: playMode })}
+              onWarm={(t) => {
+                if (t?.source === 'youtube') {
+                  void preResolveStream(t).catch(() => {});
+                }
+              }}
               onFav={toggleFavorite}
               onContextMenu={(e, t) => handleTrackContextMenu(e, t, displayed)}
               variant="tile"

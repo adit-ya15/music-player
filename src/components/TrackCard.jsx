@@ -9,6 +9,7 @@ export default function TrackCard({
   onPlay,
   onFav,
   onContextMenu,
+  onWarm,
   variant = 'list', // 'list' | 'tile'
 }) {
   if (!track) return null;
@@ -32,7 +33,15 @@ export default function TrackCard({
 
   if (variant === 'tile') {
     return (
-      <div className="tile-card" onClick={() => onPlay?.(track)}>
+      <div
+        className="tile-card"
+        onPointerDown={() => onWarm?.(track)}
+        onFocus={() => onWarm?.(track)}
+        onMouseEnter={() => onWarm?.(track)}
+        onClick={() => onPlay?.(track)}
+        tabIndex={0}
+        role="button"
+      >
         <div
           className="tile-cover"
           style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
@@ -67,11 +76,16 @@ export default function TrackCard({
   return (
     <div
       className={`track-card${isActive ? ' track-card--active' : ''}`}
+      onPointerDown={() => onWarm?.(track)}
+      onFocus={() => onWarm?.(track)}
+      onMouseEnter={() => onWarm?.(track)}
       onClick={() => onPlay?.(track)}
       onContextMenu={(e) => {
         e.preventDefault();
         onContextMenu?.(e, track);
       }}
+      tabIndex={0}
+      role="button"
     >
       <div className="cover-art-wrapper">
         <div

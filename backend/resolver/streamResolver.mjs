@@ -17,10 +17,7 @@ const CACHE_NAMESPACE = (process.env.CACHE_NAMESPACE || 'aura').trim() || 'aura'
 const VALIDATION_TIMEOUT_MS = Math.max(500, Number(process.env.STREAM_VALIDATE_TIMEOUT_MS || 4000));
 const PRIMARY_TIMEOUT_MS = Math.max(500, Number(process.env.PRIMARY_TIMEOUT_MS || 8000));
 const QUICK_FALLBACK_TIMEOUT_MS = Math.max(500, Number(process.env.QUICK_FALLBACK_TIMEOUT_MS || 2500));
-const FALLBACK_TIMEOUT_MS = Math.max(
-  500,
-  Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 9000)
-);
+const FALLBACK_TIMEOUT_MS = Math.max(500, Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 9000));
 const ENABLE_YT_FALLBACKS = String(process.env.ENABLE_YT_FALLBACKS || 'true').trim().toLowerCase() !== 'false';
 const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'android,ios,mweb')
   .split(',')
@@ -49,7 +46,7 @@ async function resolveProvider(name, provider, { timeoutMs, videoId, metric, val
           error: err?.message,
         }),
       }),
-      timeoutMs
+      timeoutMs,
     );
 
     if (!url) {
@@ -87,12 +84,11 @@ async function resolveStreamWithMetaInternal({
   cache,
   videoId,
   title,
-  artist
+  artist,
 }) {
   const key = streamKey(videoId);
 
   return dedupe(key, async () => {
-    // 1) Cache (validated)
     const cached = await cache.get(key);
     if (cached && typeof cached === 'string' && cached.trim()) {
       const ok = await withTimeout(isStreamAlive(cached), VALIDATION_TIMEOUT_MS).catch(() => false);
@@ -105,8 +101,14 @@ async function resolveStreamWithMetaInternal({
       metrics.increment('resolver.cache.miss');
     }
 
-    // 2) yt-dlp primary for YouTube playback
-    const primary = async () => {
+    const youtubeiFallback = async () => {
+      if (!innertube) return null;
+      return await youtubeiGetAudioUrl(innertube, videoId);
+    };
+
+    const ytdlCoreFallback = async () => await ytdlCoreGetAudioUrl(videoId);
+
+    const ytdlpFallback = async () => {
       if (!ytdlpBin) return null;
       const now = Date.now();
       if (ytdlpCircuitOpenedAt && (now - ytdlpCircuitOpenedAt) >= YTDLP_CB_COOLDOWN_MS) {
@@ -122,28 +124,20 @@ async function resolveStreamWithMetaInternal({
       try {
         for (const playerClient of YTDLP_CLIENTS) {
           const url = await ytdlpQueue.add(() => ytdlpGetUrl(ytdlpBin, videoId, { playerClient }));
-          if (!url) continue;
-
-          const ok = await withTimeout(isStreamAlive(url), VALIDATION_TIMEOUT_MS).catch(() => false);
-          if (ok) {
+          if (url) {
             ytdlpFailureCount = 0;
             ytdlpCircuitOpenedAt = 0;
             return url;
           }
-
-          logger.warn('resolver', 'yt-dlp returned a URL that failed validation', {
-            videoId,
-            playerClient,
-          });
         }
 
-        ytdlpFailureCount++;
+        ytdlpFailureCount += 1;
         if (ytdlpFailureCount > YTDLP_CB_THRESHOLD && !ytdlpCircuitOpenedAt) {
           ytdlpCircuitOpenedAt = Date.now();
         }
         return null;
       } catch (error) {
-        ytdlpFailureCount++;
+        ytdlpFailureCount += 1;
         if (ytdlpFailureCount > YTDLP_CB_THRESHOLD && !ytdlpCircuitOpenedAt) {
           ytdlpCircuitOpenedAt = Date.now();
         }
@@ -158,97 +152,36 @@ async function resolveStreamWithMetaInternal({
       }
     };
 
-    const ytdlCoreFallback = async () => {
-      return await ytdlCoreGetAudioUrl(videoId);
-    };
+    const pipedFallback = async () => await pipedGetAudioUrl(videoId);
+    const invidiousFallback = async () => await invidiousGetAudioUrl(videoId);
+    const saavnFallback = async () => await saavnGetAudioUrl(videoId, title, artist);
 
-    const youtubeiFallback = async () => {
-      if (!innertube) return null;
-      return await youtubeiGetAudioUrl(innertube, videoId);
-    };
-
-    const pipedFallback = async () => {
-      return await pipedGetAudioUrl(videoId);
-    };
-
-    const invidiousFallback = async () => {
-      return await invidiousGetAudioUrl(videoId);
-    };
-
-    const saavnFallback = async () => {
-      return await saavnGetAudioUrl(videoId, title, artist);
-    };
-
-    let resolved = null;
-
-    try {
-      const url = await withTimeout(
-        retry(primary, 1, {
-          delayMs: 150,
-          onError: (err) => logger.warn('resolver', 'yt-dlp attempt failed', { videoId, error: err?.message }),
-        }),
-        FALLBACK_TIMEOUT_MS
-      );
-      if (url) {
-        const ok = await withTimeout(isStreamAlive(url), VALIDATION_TIMEOUT_MS).catch(() => false);
-        if (ok) {
-          resolved = { url, source: 'yt-dlp' };
-        } else {
-          logger.warn('resolver', 'yt-dlp produced an invalid stream after resolution', { videoId });
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    if (resolved?.url) {
-      metrics.increment('resolver.primary.success');
-    }
-
-    const fallbacks = ENABLE_YT_FALLBACKS ? [
-      {
-        name: 'ytdl-core',
-        metric: 'resolver.secondary.success',
-        fn: ytdlCoreFallback,
-        timeoutMs: PRIMARY_TIMEOUT_MS,
-      },
-      {
-        name: 'youtubei',
-        metric: 'resolver.secondary.success',
-        fn: youtubeiFallback,
-        timeoutMs: PRIMARY_TIMEOUT_MS,
-      },
-      {
-        name: 'piped',
-        metric: 'resolver.fallback.used',
-        fn: pipedFallback,
-        timeoutMs: QUICK_FALLBACK_TIMEOUT_MS,
-      },
-      {
-        name: 'invidious',
-        metric: 'resolver.fallback.used',
-        fn: invidiousFallback,
-        timeoutMs: QUICK_FALLBACK_TIMEOUT_MS,
-      },
-      {
-        name: 'saavn',
-        metric: 'resolver.fallback.used',
-        fn: saavnFallback,
-        timeoutMs: PRIMARY_TIMEOUT_MS,
-      },
-    ] : [];
+    const candidateResolvers = [
+      { name: 'youtubei', metric: 'resolver.secondary.success', fn: youtubeiFallback, timeoutMs: PRIMARY_TIMEOUT_MS },
+      { name: 'ytdl-core', metric: 'resolver.secondary.success', fn: ytdlCoreFallback, timeoutMs: PRIMARY_TIMEOUT_MS },
+      { name: 'yt-dlp', metric: 'resolver.primary.success', fn: ytdlpFallback, timeoutMs: FALLBACK_TIMEOUT_MS },
+      { name: 'piped', metric: 'resolver.fallback.used', fn: pipedFallback, timeoutMs: QUICK_FALLBACK_TIMEOUT_MS },
+      { name: 'invidious', metric: 'resolver.fallback.used', fn: invidiousFallback, timeoutMs: QUICK_FALLBACK_TIMEOUT_MS },
+      { name: 'saavn', metric: 'resolver.fallback.used', fn: saavnFallback, timeoutMs: PRIMARY_TIMEOUT_MS },
+    ];
 
     if (!ENABLE_YT_FALLBACKS) {
       logger.info('resolver', 'Non-yt-dlp fallbacks are disabled (yt-dlp only mode)', { videoId });
     }
 
-    for (const fallback of fallbacks) {
-      if (resolved?.url) break;
-      resolved = await resolveProvider(fallback.name, fallback.fn, {
-        timeoutMs: fallback.timeoutMs || PRIMARY_TIMEOUT_MS,
+    let resolved = null;
+    for (const candidate of candidateResolvers) {
+      if (!ENABLE_YT_FALLBACKS && candidate.name !== 'yt-dlp') continue;
+      const result = await resolveProvider(candidate.name, candidate.fn, {
+        timeoutMs: candidate.timeoutMs,
         videoId,
-        metric: fallback.metric,
+        metric: candidate.metric,
       });
+
+      if (result?.url) {
+        resolved = result;
+        break;
+      }
     }
 
     if (!resolved?.url) {
@@ -256,7 +189,6 @@ async function resolveStreamWithMetaInternal({
       throw new Error('Stream unavailable');
     }
 
-    // 4) Cache stampede protection via jittered TTL
     const ttl = TTL_SECONDS + Math.floor(Math.random() * 120);
     await cache.set(key, resolved.url, ttl);
     return resolved;

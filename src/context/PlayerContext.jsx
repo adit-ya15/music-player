@@ -1847,7 +1847,8 @@ export const PlayerProvider = ({ children }) => {
     moveQueueItem,
     dedupeQueue,
     optimizeQueueFlow,
-    recordTasteSignal
+    recordTasteSignal,
+    preResolveStream
 
   };
 
