@@ -1,58 +1,6 @@
-import { resolveMonochromeStream } from './monochromeSource.js';
 import { resolveYtdlpEndpointStream } from './ytdlpSource.js';
 
 const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
-const MONOCHROME_HEDGE_DELAY_MS = 120;
-
-function delay(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function toCandidate(promise, source) {
-  return promise.then((result) => {
-    if (result?.streamUrl) {
-      return {
-        ...result,
-        streamSource: result.streamSource || source,
-      };
-    }
-    throw new Error(`${source} stream unavailable`);
-  });
-}
-
-function firstSuccessfulStream(promises) {
-  return new Promise((resolve) => {
-    if (!Array.isArray(promises) || promises.length === 0) {
-      resolve(null);
-      return;
-    }
-
-    let settled = false;
-    let pending = promises.length;
-
-    for (const candidatePromise of promises) {
-      Promise.resolve(candidatePromise)
-        .then((value) => {
-          if (settled) return;
-          if (value?.streamUrl) {
-            settled = true;
-            resolve(value);
-          }
-        })
-        .catch(() => {
-          // Swallow individual provider failures; winner may still arrive.
-        })
-        .finally(() => {
-          pending -= 1;
-          if (!settled && pending <= 0) {
-            resolve(null);
-          }
-        });
-    }
-  });
-}
 
 function normalizeVideoId(track) {
   const raw = track?.videoId || track?.id || '';
@@ -64,10 +12,9 @@ export function createMusicSources({
   jamendoApi,
   soundcloudApi,
   ytdlpResolver = resolveYtdlpEndpointStream,
-  monochromeResolver = resolveMonochromeStream,
+  monochromeResolver,
 }) {
   const streamCache = new Map();
-  const sourcePreference = new Map();
 
   function getCachedStream(videoId) {
     const cached = streamCache.get(videoId);
@@ -98,81 +45,40 @@ export function createMusicSources({
     }
   }
 
-  function setPreferredSource(videoId, source) {
-    if (!videoId || !source) return;
-    sourcePreference.set(videoId, source);
-    if (sourcePreference.size > 1000) {
-      const oldestKey = sourcePreference.keys().next().value;
-      if (oldestKey) sourcePreference.delete(oldestKey);
-    }
-  }
-
   async function resolveYoutubeFast(videoId, track) {
-    const preferred = sourcePreference.get(videoId);
+    const resolved = await ytdlpResolver(videoId, {
+      title: track?.title,
+      artist: track?.artist,
+    });
 
-    const createYtdlpTask = () => toCandidate(
-      ytdlpResolver(videoId, {
-        title: track?.title,
-        artist: track?.artist,
-      }),
-      'yt-dlp'
-    );
-
-    const createMonochromeTask = () => toCandidate(
-      monochromeResolver(videoId, {
-        title: track?.title,
-        artist: track?.artist,
-      }),
-      'monochrome'
-    );
-
-    // Hedge requests like Nuclear-style resolver: start preferred source first,
-    // then trigger the other shortly after to reduce tail latency.
-    const raced = preferred === 'monochrome'
-      ? [
-          createMonochromeTask(),
-          delay(MONOCHROME_HEDGE_DELAY_MS).then(() => createYtdlpTask()),
-        ]
-      : [
-          createYtdlpTask(),
-          delay(MONOCHROME_HEDGE_DELAY_MS).then(() => createMonochromeTask()),
-        ];
-
-    const resolved = await firstSuccessfulStream(raced);
     if (resolved?.streamUrl) {
-      setPreferredSource(videoId, resolved.streamSource);
-      setCachedStream(videoId, resolved);
-      return resolved;
+      const nextResolved = {
+        ...resolved,
+        streamSource: resolved.streamSource || 'yt-dlp',
+      };
+      setCachedStream(videoId, nextResolved);
+      return nextResolved;
     }
 
     return null;
   }
 
-  async function resolveJamendoLegalFallback(track) {
-    if (!jamendoApi) return null;
+  async function resolveYoutubeFallback(videoId, track) {
+    if (!monochromeResolver) return null;
 
-    const query = [track?.title, track?.artist].filter(Boolean).join(' ').trim();
-    if (!query) return null;
+    const resolved = await monochromeResolver(videoId, {
+      title: track?.title,
+      artist: track?.artist,
+    });
 
-    const search = await jamendoApi.searchSongsSafe(query, 6);
-    if (!search.ok || !Array.isArray(search.data) || !search.data.length) return null;
+    if (!resolved?.streamUrl) return null;
 
-    for (const candidate of search.data) {
-      const resolved = await jamendoApi.resolveStreamSafe({
-        url: candidate?.streamUrl || candidate?.url,
-        trackId: candidate?.originalId,
-      });
-      if (resolved.ok && resolved.data?.streamUrl) {
-        const jamendoResolved = {
-          streamUrl: resolved.data.streamUrl,
-          streamSource: resolved.data.streamSource || 'jamendo',
-          verified: true,
-        };
-        return jamendoResolved;
-      }
-    }
-
-    return null;
+    const nextResolved = {
+      ...resolved,
+      streamSource: resolved.streamSource || 'monochrome',
+    };
+    setCachedStream(videoId, nextResolved);
+    return nextResolved;
   }
 
   const youtubeSource = {
@@ -194,10 +100,9 @@ export function createMusicSources({
         return resolvedFast;
       }
 
-      const jamendoLegal = await resolveJamendoLegalFallback(track);
-      if (jamendoLegal?.streamUrl) {
-        setCachedStream(videoId, jamendoLegal);
-        return jamendoLegal;
+      const resolvedFallback = await resolveYoutubeFallback(videoId, track);
+      if (resolvedFallback?.streamUrl) {
+        return resolvedFallback;
       }
 
       return null;
@@ -212,6 +117,7 @@ export function createMusicSources({
     async getStreamUrl(track) {
       const videoId = normalizeVideoId(track);
       if (!videoId) return null;
+      if (!monochromeResolver) return null;
       return monochromeResolver(videoId, {
         title: track?.title,
         artist: track?.artist,

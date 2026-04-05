@@ -1931,16 +1931,41 @@ function App() {
   }, [ensurePlaylistAccess]);
 
   const resolveImportedTrack = useCallback(async (entry) => {
+    if (entry && typeof entry === 'object') {
+      const videoId = String(entry.videoId || entry.id || '').trim();
+      if (videoId) {
+        return {
+          id: `yt-${videoId}`,
+          originalId: videoId,
+          videoId,
+          title: String(entry.title || entry.name || videoId).trim() || videoId,
+          artist: String(entry.channel || entry.artist || entry.author || 'YouTube').trim() || 'YouTube',
+          album: '',
+          coverArt: String(entry.thumbnail || entry.artwork || '').trim() || '',
+          duration: Number(entry.duration || 0) || 0,
+          source: 'youtube',
+          streamUrl: null,
+        };
+      }
+    }
+
     const value = String(entry || '').trim();
     if (!value) return null;
 
     const youtubeId = value.startsWith('youtube:') ? value.replace(/^youtube:/, '') : extractYoutubeVideoId(value);
     if (youtubeId) {
-      const detailsRes = await youtubeApi.searchSongsSafe(youtubeId, 1);
-      const directMatch = Array.isArray(detailsRes.data)
-        ? detailsRes.data.find((track) => track.videoId === youtubeId || getTrackSourceId(track) === youtubeId)
-        : null;
-      if (directMatch) return directMatch;
+      return {
+        id: `yt-${youtubeId}`,
+        originalId: youtubeId,
+        videoId: youtubeId,
+        title: youtubeId,
+        artist: 'YouTube',
+        album: '',
+        coverArt: '',
+        duration: 0,
+        source: 'youtube',
+        streamUrl: null,
+      };
     }
 
     const searchRes = await youtubeApi.searchSongsSafe(value, 6);
@@ -1961,15 +1986,9 @@ function App() {
         return;
       }
 
-      const seedEntries = imported.data
-        .map((entry) => String(entry?.videoId || entry?.id || entry?.title || '').trim())
-        .filter(Boolean)
-        .slice(0, 80)
-        .map((value) => (value.length === 11 ? `youtube:${value}` : value));
-
       const resolved = [];
       const seen = new Set();
-      for (const entry of seedEntries) {
+      for (const entry of imported.data.slice(0, 80)) {
         const track = await resolveImportedTrack(entry);
         const id = getTrackSourceId(track);
         if (!track || !id || seen.has(id)) continue;

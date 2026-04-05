@@ -24,26 +24,32 @@ test('youtube source uses client ytdlp resolver when available', async () => {
   assert.equal(resolved.streamSource, 'yt-dlp');
 });
 
-test('youtube source falls back to monochrome resolver when direct stream is unavailable', async () => {
+test('youtube source falls back to monochrome resolver after ytdlp fails', async () => {
   const youtubeApi = {
     async searchSongsSafe() {
       return { ok: true, data: [] };
     },
   };
 
+  let monochromeCalls = 0;
+
   const sources = createMusicSources({
     youtubeApi,
     ytdlpResolver: async () => null,
-    monochromeResolver: async () => ({
-      streamUrl: 'https://mono.example/audio.webm',
-      streamSource: 'monochrome',
-    }),
+    monochromeResolver: async () => {
+      monochromeCalls += 1;
+      return {
+        streamUrl: 'https://mono.example/audio.webm',
+        streamSource: 'monochrome',
+      };
+    },
   });
 
   const resolved = await sources.youtube.getStreamUrl({ id: 'yt-xyz98765432', title: 'Song', artist: 'Artist' });
   assert.ok(resolved);
   assert.equal(resolved.streamUrl, 'https://mono.example/audio.webm');
   assert.equal(resolved.streamSource, 'monochrome');
+  assert.equal(monochromeCalls, 1);
 });
 
 test('monochrome source resolves youtube ids', async () => {

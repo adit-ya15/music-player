@@ -594,16 +594,18 @@ export const PlayerProvider = ({ children }) => {
     const existingUrl = currentUrl;
     const isPipeUrl = existingUrl.includes("/api/yt/pipe/");
     const isCacheUrl = isYoutubeCacheUrl(existingUrl);
+    const isPreviewLikeExisting = isLikelyPreviewStream(track, existingUrl);
     const lastCacheCheck = Number(track.cacheCheckedAt || 0);
     const lastResolvedAt = Number(track.streamResolvedAt || track.cacheCheckedAt || 0);
     const recentlyResolved = Date.now() - lastResolvedAt < STREAM_URL_REUSE_MS;
 
     if (!forceRefresh && existingUrl) {
       const shouldReuseExisting =
-        track.source !== "youtube" ||
+        (track.source !== "youtube" ||
         !isNative ||
         isCacheUrl ||
-        (!isPipeUrl && recentlyResolved);
+        (!isPipeUrl && recentlyResolved))
+        && !isPreviewLikeExisting;
 
       if (shouldReuseExisting) {
         return mergeResolvedTrack(track, {

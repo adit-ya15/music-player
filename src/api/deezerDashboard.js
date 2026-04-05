@@ -11,7 +11,7 @@ function normalizeTrack(item = {}) {
     artist: String(item.artist?.name || 'Unknown Artist').trim(),
     album: String(item.album?.title || '').trim(),
     coverArt: String(item.album?.cover_xl || item.album?.cover_big || '').trim(),
-    streamUrl: String(item.preview || '').trim() || null,
+    streamUrl: null,
     duration: Number(item.duration || 0),
     source: 'deezer',
   };
@@ -23,7 +23,7 @@ async function fetchSection(path) {
   if (!response.ok) throw new Error(`Deezer responded with ${response.status}`);
   const payload = await response.json();
   const rows = Array.isArray(payload?.data) ? payload.data : [];
-  return rows.map(normalizeTrack).filter((track) => track.streamUrl);
+  return rows.map(normalizeTrack).filter((track) => track.title && track.artist);
 }
 
 export const deezerDashboardApi = {

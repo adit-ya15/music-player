@@ -10,8 +10,8 @@ const PLUGIN_RULES = {
     collaboration: 'Enriches album/genre metadata and complements MusicBrainz canonical IDs.',
   },
   'nuclear-plugin-youtube': {
-    requirements: ['VITE_YTDLP_ENDPOINTS'],
-    collaboration: 'Primary streaming source. Runs in hedged mode with Monochrome for low latency.',
+    requirements: [],
+    collaboration: 'Primary streaming source. Uses yt-dlp first, then Monochrome as fallback if needed.',
   },
   'nuclear-plugin-bandcamp': {
     requirements: ['VITE_BANDCAMP_SEARCH_ENDPOINT'],
@@ -47,7 +47,7 @@ const PLUGIN_RULES = {
   },
   'nuclear-plugin-monochrome': {
     requirements: [],
-    collaboration: 'Low-latency streaming fallback that races with YouTube resolver.',
+    collaboration: 'Low-latency streaming fallback that can be used independently of YouTube playback.',
   },
 };
 
@@ -58,12 +58,13 @@ function buildStatus(pluginId) {
 
   switch (pluginId) {
     case 'nuclear-plugin-youtube': {
-      const status = missingRequirements.length ? 'degraded' : 'ready';
+      const hasCustomEndpoints = hasConfiguredValue(env.VITE_YTDLP_ENDPOINTS);
+      const status = 'ready';
       return {
         status,
-        note: status === 'ready'
-          ? 'Client yt-dlp endpoints are configured.'
-          : 'YouTube stream plugin is active in fallback mode until yt-dlp endpoints are configured.',
+        note: hasCustomEndpoints
+          ? 'Custom yt-dlp endpoints are configured.'
+          : 'Using built-in API resolver fallback (/api/yt/stream) for YouTube extraction.',
         missingRequirements,
         collaboration: rule.collaboration,
       };

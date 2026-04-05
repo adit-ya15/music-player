@@ -14,6 +14,11 @@ function normalizeBaseUrl(value = '') {
   return String(value || '').replace(/\/+$/, '');
 }
 
+function getApiBase() {
+  const base = String(import.meta?.env?.VITE_API_BASE || '/api');
+  return base.replace(/\/+$/, '');
+}
+
 function pickUrl(payload) {
   if (!payload) return '';
   if (typeof payload === 'string') {
@@ -33,10 +38,16 @@ function pickUrl(payload) {
   return candidate ? candidate.trim() : '';
 }
 
-function buildCandidates(videoId, endpointsCsv) {
+function buildCandidates(videoId, endpointsCsv, options = {}) {
   const envEndpoints = import.meta?.env?.VITE_YTDLP_ENDPOINTS || '';
   const configured = splitCsv(endpointsCsv || envEndpoints || '');
-  if (!configured.length) return [];
+  if (!configured.length) {
+    const fallbackPath = `${getApiBase()}/yt/stream/${encodeURIComponent(videoId)}`;
+    const url = new URL(fallbackPath, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    if (options?.title) url.searchParams.set('title', String(options.title));
+    if (options?.artist) url.searchParams.set('artist', String(options.artist));
+    return [url.toString()];
+  }
 
   const candidates = [];
   for (const endpoint of configured) {
@@ -99,7 +110,7 @@ async function fetchCandidate(endpointUrl, timeoutMs) {
 export async function resolveYtdlpEndpointStream(videoId, options = {}) {
   if (!videoId) return null;
 
-  const candidates = buildCandidates(videoId, options.endpoints);
+  const candidates = buildCandidates(videoId, options.endpoints, options);
   if (!candidates.length) return null;
 
   const timeoutMs = Math.max(1500, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS));
