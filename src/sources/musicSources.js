@@ -1,4 +1,5 @@
 import { resolveYtdlpEndpointStream } from './ytdlpSource.js';
+import { resolveYoutubeiClientStream } from './youtubeiSource.js';
 
 const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -11,6 +12,7 @@ export function createMusicSources({
   youtubeApi,
   jamendoApi,
   soundcloudApi,
+  youtubeiClientResolver = resolveYoutubeiClientStream,
   ytdlpResolver = resolveYtdlpEndpointStream,
   monochromeResolver,
 }) {
@@ -45,8 +47,10 @@ export function createMusicSources({
     }
   }
 
-  async function resolveYoutubeFast(videoId, track) {
-    const resolved = await ytdlpResolver(videoId, {
+  async function resolveYoutubePrimary(videoId, track) {
+    if (!youtubeiClientResolver) return null;
+
+    const resolved = await youtubeiClientResolver(videoId, {
       title: track?.title,
       artist: track?.artist,
     });
@@ -54,7 +58,7 @@ export function createMusicSources({
     if (resolved?.streamUrl) {
       const nextResolved = {
         ...resolved,
-        streamSource: resolved.streamSource || 'yt-dlp',
+        streamSource: resolved.streamSource || 'youtubei-client',
       };
       setCachedStream(videoId, nextResolved);
       return nextResolved;
@@ -81,6 +85,24 @@ export function createMusicSources({
     return nextResolved;
   }
 
+  async function resolveYoutubeBackup(videoId, track) {
+    if (!ytdlpResolver) return null;
+
+    const resolved = await ytdlpResolver(videoId, {
+      title: track?.title,
+      artist: track?.artist,
+    });
+
+    if (!resolved?.streamUrl) return null;
+
+    const nextResolved = {
+      ...resolved,
+      streamSource: resolved.streamSource || 'yt-dlp',
+    };
+    setCachedStream(videoId, nextResolved);
+    return nextResolved;
+  }
+
   const youtubeSource = {
     id: 'youtube',
     async search(query, limit = 20) {
@@ -95,14 +117,19 @@ export function createMusicSources({
         return cached;
       }
 
-      const resolvedFast = await resolveYoutubeFast(videoId, track);
-      if (resolvedFast?.streamUrl) {
-        return resolvedFast;
+      const resolvedPrimary = await resolveYoutubePrimary(videoId, track);
+      if (resolvedPrimary?.streamUrl) {
+        return resolvedPrimary;
       }
 
       const resolvedFallback = await resolveYoutubeFallback(videoId, track);
       if (resolvedFallback?.streamUrl) {
         return resolvedFallback;
+      }
+
+      const resolvedBackup = await resolveYoutubeBackup(videoId, track);
+      if (resolvedBackup?.streamUrl) {
+        return resolvedBackup;
       }
 
       return null;

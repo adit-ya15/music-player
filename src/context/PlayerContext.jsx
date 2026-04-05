@@ -18,6 +18,8 @@ import { soundcloudApi } from "../api/soundcloud";
 import { recommendationsApi } from "../api/recommendations";
 import { getOrCreateUserId } from "../utils/userId";
 import { createMusicSources } from "../sources/musicSources";
+import { resolveMonochromeStream } from "../sources/monochromeSource";
+import { resolveYoutubeiClientStream } from "../sources/youtubeiSource";
 
 import {
   buildPlaybackSession,
@@ -359,7 +361,13 @@ export const usePlayer = () => useContext(PlayerContext);
 
 export const PlayerProvider = ({ children }) => {
 
-  const musicSources = useRef(createMusicSources({ youtubeApi, jamendoApi, soundcloudApi })).current;
+  const musicSources = useRef(createMusicSources({
+    youtubeApi,
+    jamendoApi,
+    soundcloudApi,
+    youtubeiClientResolver: resolveYoutubeiClientStream,
+    monochromeResolver: resolveMonochromeStream,
+  })).current;
 
   const [currentTrack, setCurrentTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);

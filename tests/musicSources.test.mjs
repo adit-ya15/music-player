@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createMusicSources } from '../src/sources/musicSources.js';
 
-test('youtube source uses client ytdlp resolver when available', async () => {
+test('youtube source uses client youtubei resolver when available', async () => {
   const youtubeApi = {
     async searchSongsSafe() {
       return { ok: true, data: [] };
@@ -12,19 +12,19 @@ test('youtube source uses client ytdlp resolver when available', async () => {
 
   const sources = createMusicSources({
     youtubeApi,
-    ytdlpResolver: async () => ({
-      streamUrl: 'https://media.example/yt-audio.webm',
-      streamSource: 'yt-dlp',
+    youtubeiClientResolver: async () => ({
+      streamUrl: 'https://media.example/client-audio.webm',
+      streamSource: 'youtubei-client',
     }),
   });
   const resolved = await sources.youtube.getStreamUrl({ id: 'yt-abc123def45', title: 'Song', artist: 'Artist' });
 
   assert.ok(resolved);
-  assert.equal(resolved.streamUrl, 'https://media.example/yt-audio.webm');
-  assert.equal(resolved.streamSource, 'yt-dlp');
+  assert.equal(resolved.streamUrl, 'https://media.example/client-audio.webm');
+  assert.equal(resolved.streamSource, 'youtubei-client');
 });
 
-test('youtube source falls back to monochrome resolver after ytdlp fails', async () => {
+test('youtube source falls back to monochrome resolver after client resolver fails', async () => {
   const youtubeApi = {
     async searchSongsSafe() {
       return { ok: true, data: [] };
@@ -35,7 +35,7 @@ test('youtube source falls back to monochrome resolver after ytdlp fails', async
 
   const sources = createMusicSources({
     youtubeApi,
-    ytdlpResolver: async () => null,
+    youtubeiClientResolver: async () => null,
     monochromeResolver: async () => {
       monochromeCalls += 1;
       return {

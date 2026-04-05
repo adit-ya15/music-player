@@ -3,9 +3,6 @@ import { logger } from '../lib/logger.mjs';
 import { withTimeout } from '../lib/withTimeout.mjs';
 import { dedupe } from '../lib/dedupe.mjs';
 import { metrics } from '../lib/metrics.mjs';
-import { invidiousGetAudioUrl } from '../providers/invidiousProvider.mjs';
-import { pipedGetAudioUrl } from '../providers/pipedProvider.mjs';
-import { saavnGetAudioUrl } from '../providers/saavnProvider.mjs';
 import { ytdlCoreGetAudioUrl } from '../providers/ytdlCoreProvider.mjs';
 import { youtubeiGetAudioUrl } from '../providers/youtubeiProvider.mjs';
 import { ytdlpGetUrl } from '../providers/ytdlpProvider.mjs';
@@ -152,17 +149,10 @@ async function resolveStreamWithMetaInternal({
       }
     };
 
-    const pipedFallback = async () => await pipedGetAudioUrl(videoId);
-    const invidiousFallback = async () => await invidiousGetAudioUrl(videoId);
-    const saavnFallback = async () => await saavnGetAudioUrl(videoId, title, artist);
-
     const candidateResolvers = [
       { name: 'youtubei', metric: 'resolver.secondary.success', fn: youtubeiFallback, timeoutMs: PRIMARY_TIMEOUT_MS },
       { name: 'ytdl-core', metric: 'resolver.secondary.success', fn: ytdlCoreFallback, timeoutMs: PRIMARY_TIMEOUT_MS },
       { name: 'yt-dlp', metric: 'resolver.primary.success', fn: ytdlpFallback, timeoutMs: FALLBACK_TIMEOUT_MS },
-      { name: 'piped', metric: 'resolver.fallback.used', fn: pipedFallback, timeoutMs: QUICK_FALLBACK_TIMEOUT_MS },
-      { name: 'invidious', metric: 'resolver.fallback.used', fn: invidiousFallback, timeoutMs: QUICK_FALLBACK_TIMEOUT_MS },
-      { name: 'saavn', metric: 'resolver.fallback.used', fn: saavnFallback, timeoutMs: PRIMARY_TIMEOUT_MS },
     ];
 
     if (!ENABLE_YT_FALLBACKS) {
