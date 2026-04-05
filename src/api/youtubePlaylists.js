@@ -2,8 +2,15 @@ import { friendlyErrorMessage, logError } from '../utils/logger';
 
 const YT_PLAYLIST_IMPORT_ENDPOINT = String(import.meta?.env?.VITE_YOUTUBE_PLAYLIST_IMPORT_ENDPOINT || '/api/plugins/youtube-playlist').trim();
 
+function normalizePlaylistInput(value = '') {
+  return String(value || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
 export function extractYoutubePlaylistId(value = '') {
-  const text = String(value || '').trim();
+  const text = normalizePlaylistInput(value);
   if (!text) return '';
 
   const decoded = (() => {
@@ -43,7 +50,12 @@ export const youtubePlaylistsApi = {
     }
 
     try {
-      const endpoint = new URL(YT_PLAYLIST_IMPORT_ENDPOINT);
+      const endpoint = new URL(
+        YT_PLAYLIST_IMPORT_ENDPOINT,
+        typeof window !== 'undefined' && window.location?.origin
+          ? window.location.origin
+          : 'http://localhost'
+      );
       endpoint.searchParams.set('list', playlistId);
       const response = await fetch(endpoint.toString(), { headers: { Accept: 'application/json' } });
 
