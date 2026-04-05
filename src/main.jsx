@@ -6,6 +6,8 @@ import { PlayerProvider } from './context/PlayerContext.jsx';
 import BootSequence from './components/BootSequence.jsx';
 import './index.css';
 
+const isNativePlatform = Capacitor.isNativePlatform();
+
 // Default to dark (Apple Music style). Persist user preference.
 const savedTheme = localStorage.getItem('null-theme') || localStorage.getItem('aura-theme') || 'dark';
 document.documentElement.dataset.theme = savedTheme;
@@ -35,7 +37,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-if (Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
+if (isNativePlatform && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations()
     .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
     .catch(() => {});
@@ -47,14 +49,23 @@ if (Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
   }
 }
 
+if (isNativePlatform) {
+  const globalSplash = document.getElementById('global-boot-splash');
+  if (globalSplash?.parentNode) {
+    globalSplash.parentNode.removeChild(globalSplash);
+  }
+}
+
+const appTree = (
+  <PlayerProvider>
+    <App />
+  </PlayerProvider>
+);
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <BootSequence>
-        <PlayerProvider>
-          <App />
-        </PlayerProvider>
-      </BootSequence>
+      {isNativePlatform ? appTree : <BootSequence>{appTree}</BootSequence>}
     </ErrorBoundary>
   </React.StrictMode>,
 );

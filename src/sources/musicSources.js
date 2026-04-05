@@ -15,7 +15,11 @@ export function createMusicSources({ youtubeApi, jamendoApi }) {
       const videoId = normalizeVideoId(track);
       if (!videoId) return null;
 
-      const details = await youtubeApi.getStreamDetails(videoId, { preferDirect: true });
+      const details = await youtubeApi.getStreamDetails(videoId, {
+        preferDirect: true,
+        title: track?.title,
+        artist: track?.artist,
+      });
       const streamUrl = typeof details?.streamUrl === 'string' ? details.streamUrl.trim() : '';
       if (streamUrl) {
         return {

@@ -123,6 +123,79 @@ const toFriendlyPlaybackHint = (message = '') => {
   return text;
 };
 
+const stripPathToBasename = (value = '') => String(value || '').split(/[\\/]/).pop() || '';
+
+const normalizeImportQuery = (value = '') => String(value || '')
+  .replace(/\.[a-z0-9]{2,5}$/i, '')
+  .replace(/[_-]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const extractYoutubeVideoId = (value = '') => {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const directMatch = text.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([\w-]{11})/i);
+  if (directMatch?.[1]) return directMatch[1];
+  if (/^[\w-]{11}$/.test(text)) return text;
+  return null;
+};
+
+const parseImportedPlaylistEntries = (rawText = '', extension = '') => {
+  const lines = String(rawText || '').split(/\r?\n/);
+  const ext = String(extension || '').toLowerCase();
+
+  if (ext === '.json') {
+    try {
+      const parsed = JSON.parse(rawText);
+      const items = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.tracks)
+          ? parsed.tracks
+          : [];
+      return items
+        .map((item) => {
+          if (typeof item === 'string') return normalizeImportQuery(item);
+          if (!item || typeof item !== 'object') return '';
+          return normalizeImportQuery(`${item.title || item.name || ''} ${item.artist || item.author || ''}`);
+        })
+        .filter(Boolean)
+        .slice(0, 80);
+    } catch {
+      return [];
+    }
+  }
+
+  const collected = [];
+  for (const line of lines) {
+    const value = String(line || '').trim();
+    if (!value || value.startsWith('#')) continue;
+    if (value.startsWith('File')) {
+      const [, trackText = ''] = value.split('=');
+      const normalized = normalizeImportQuery(stripPathToBasename(trackText));
+      if (normalized) collected.push(normalized);
+      continue;
+    }
+
+    const youtubeId = extractYoutubeVideoId(value);
+    if (youtubeId) {
+      collected.push(`youtube:${youtubeId}`);
+      continue;
+    }
+
+    const csvParts = value.split(',').map((part) => part.trim());
+    if (csvParts.length >= 2 && !/^https?:/i.test(value)) {
+      const normalized = normalizeImportQuery(`${csvParts[0]} ${csvParts[1]}`);
+      if (normalized) collected.push(normalized);
+      continue;
+    }
+
+    const normalized = normalizeImportQuery(stripPathToBasename(value));
+    if (normalized && normalized.length >= 2) collected.push(normalized);
+  }
+
+  return [...new Set(collected)].slice(0, 80);
+};
+
 /* ── Radio station definitions ── */
 const RADIO_STATIONS = [
   { id: 'bollywood', name: 'Bollywood Hits', query: 'Bollywood hits 2025', gradient: 'linear-gradient(135deg, #e91e63, #ff5722)' },
@@ -172,6 +245,7 @@ function App() {
     resumeState,
     resumePlayback,
     clearResumeState,
+    recordTasteSignal,
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState('home');
@@ -233,6 +307,17 @@ function App() {
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isLibrarySyncing, setIsLibrarySyncing] = useState(false);
   const [librarySyncMessage, setLibrarySyncMessage] = useState('');
+  const [playlistImportState, setPlaylistImportState] = useState({
+    inProgress: false,
+    message: '',
+  });
+  const [playlistEditor, setPlaylistEditor] = useState({
+    open: false,
+    mode: 'create',
+    playlistId: null,
+    name: '',
+    error: '',
+  });
   const [smartDownloadsEnabled, setSmartDownloadsEnabled] = useLocalStorage('aura-smart-downloads', false);
   const [hasCompletedReadinessCheck, setHasCompletedReadinessCheck] = useLocalStorage('aura-readiness-check-complete', false);
   const [issueReportState, setIssueReportState] = useState({
@@ -259,6 +344,7 @@ function App() {
   const [playbackHint, setPlaybackHint] = useState('');
   const platformLabel = Capacitor.isNativePlatform() ? 'Android app' : 'Web preview';
   const libraryImportInputRef = useRef(null);
+  const playlistImportInputRef = useRef(null);
 
   const downloadedTrackMap = useMemo(() => {
     const next = new Map();
@@ -1152,25 +1238,98 @@ function App() {
       if (alreadyFavorite) {
         return prev.filter((favoriteTrack) => getTrackSourceId(favoriteTrack) !== trackSourceId);
       }
+      recordTasteSignal('like', track);
       return [...prev, track];
     });
-  }, [setFavorites]);
+  }, [recordTasteSignal, setFavorites]);
 
   const createPlaylist = useCallback((name) => {
     const trimmedName = name?.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) return false;
+    const alreadyExists = playlists.some((playlist) => playlist.name.trim().toLowerCase() === trimmedName.toLowerCase());
+    if (alreadyExists) return false;
     setPlaylists((prev) => [...prev, { id: Date.now().toString(), name: trimmedName, color: randomColor(), tracks: [] }]);
-  }, [setPlaylists]);
+    return true;
+  }, [playlists, setPlaylists]);
 
   const renamePlaylist = useCallback((playlistId, name) => {
     const trimmedName = name?.trim();
-    if (!playlistId || !trimmedName) return;
+    if (!playlistId || !trimmedName) return false;
+    const alreadyExists = playlists.some((playlist) => (
+      playlist.id !== playlistId
+      && playlist.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    ));
+    if (alreadyExists) return false;
     setPlaylists((prev) => prev.map((playlist) => (
       playlist.id === playlistId
         ? { ...playlist, name: trimmedName }
         : playlist
     )));
-  }, [setPlaylists]);
+    return true;
+  }, [playlists, setPlaylists]);
+
+  const ensurePlaylistAccess = useCallback(() => {
+    if (authUser) return true;
+    setAuthError('Sign in to create and edit playlists.');
+    setAuthModalMode('login');
+    setIsAuthModalOpen(true);
+    return false;
+  }, [authUser]);
+
+  const openCreatePlaylistEditor = useCallback(() => {
+    if (!ensurePlaylistAccess()) return;
+    setPlaylistEditor({
+      open: true,
+      mode: 'create',
+      playlistId: null,
+      name: '',
+      error: '',
+    });
+  }, [ensurePlaylistAccess]);
+
+  const openRenamePlaylistEditor = useCallback((playlist) => {
+    if (!ensurePlaylistAccess() || !playlist?.id) return;
+    setPlaylistEditor({
+      open: true,
+      mode: 'rename',
+      playlistId: playlist.id,
+      name: String(playlist.name || ''),
+      error: '',
+    });
+  }, [ensurePlaylistAccess]);
+
+  const closePlaylistEditor = useCallback(() => {
+    setPlaylistEditor({
+      open: false,
+      mode: 'create',
+      playlistId: null,
+      name: '',
+      error: '',
+    });
+  }, []);
+
+  const submitPlaylistEditor = useCallback((event) => {
+    event?.preventDefault?.();
+    if (!ensurePlaylistAccess()) return;
+
+    const nextName = String(playlistEditor.name || '').trim();
+    if (!nextName) {
+      setPlaylistEditor((prev) => ({ ...prev, error: 'Playlist name is required.' }));
+      return;
+    }
+
+    const ok = playlistEditor.mode === 'create'
+      ? createPlaylist(nextName)
+      : renamePlaylist(playlistEditor.playlistId, nextName);
+
+    if (!ok) {
+      setPlaylistEditor((prev) => ({ ...prev, error: 'Playlist name already exists.' }));
+      return;
+    }
+
+    closePlaylistEditor();
+    setLibrarySubView((current) => (current?.startsWith('playlist-') ? current : 'playlists'));
+  }, [closePlaylistEditor, createPlaylist, ensurePlaylistAccess, playlistEditor.mode, playlistEditor.name, playlistEditor.playlistId, renamePlaylist]);
 
   const deletePlaylist = useCallback((playlistId) => {
     if (!playlistId) return;
@@ -1615,6 +1774,90 @@ function App() {
     }
   }, [applyLibraryState]);
 
+  const handlePlaylistImportClick = useCallback(() => {
+    if (!ensurePlaylistAccess()) return;
+    playlistImportInputRef.current?.click?.();
+  }, [ensurePlaylistAccess]);
+
+  const resolveImportedTrack = useCallback(async (entry) => {
+    const value = String(entry || '').trim();
+    if (!value) return null;
+
+    const youtubeId = value.startsWith('youtube:') ? value.replace(/^youtube:/, '') : extractYoutubeVideoId(value);
+    if (youtubeId) {
+      const detailsRes = await youtubeApi.searchSongsSafe(youtubeId, 1);
+      const directMatch = Array.isArray(detailsRes.data)
+        ? detailsRes.data.find((track) => track.videoId === youtubeId || getTrackSourceId(track) === youtubeId)
+        : null;
+      if (directMatch) return directMatch;
+    }
+
+    const searchRes = await youtubeApi.searchSongsSafe(value, 6);
+    if (!searchRes.ok || !Array.isArray(searchRes.data) || !searchRes.data.length) return null;
+
+    const firstPlayable = onlyYoutube(searchRes.data)[0] || searchRes.data[0];
+    return firstPlayable || null;
+  }, []);
+
+  const handlePlaylistImportChange = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!ensurePlaylistAccess()) return;
+
+    setPlaylistImportState({ inProgress: true, message: 'Importing playlist...' });
+
+    try {
+      const extensionMatch = String(file.name || '').toLowerCase().match(/\.[a-z0-9]+$/i);
+      const extension = extensionMatch ? extensionMatch[0] : '';
+      const raw = await file.text();
+      const entries = parseImportedPlaylistEntries(raw, extension);
+
+      if (!entries.length) {
+        setPlaylistImportState({ inProgress: false, message: 'No playlist entries found in that file.' });
+        return;
+      }
+
+      const resolved = [];
+      const seen = new Set();
+      const cappedEntries = entries.slice(0, 60);
+
+      for (let index = 0; index < cappedEntries.length; index += 1) {
+        const track = await resolveImportedTrack(cappedEntries[index]);
+        const id = getTrackSourceId(track);
+        if (!track || !id || seen.has(id)) continue;
+        seen.add(id);
+        resolved.push(track);
+      }
+
+      if (!resolved.length) {
+        setPlaylistImportState({ inProgress: false, message: 'Could not map playlist songs to playable tracks.' });
+        return;
+      }
+
+      const baseName = String(file.name || 'Imported Playlist').replace(/\.[^/.]+$/, '').trim() || 'Imported Playlist';
+      const finalName = `${baseName.slice(0, 45)} (${new Date().toLocaleDateString()})`;
+      setPlaylists((prev) => {
+        const safeName = prev.some((playlist) => playlist.name.toLowerCase() === finalName.toLowerCase())
+          ? `${finalName} ${Date.now().toString().slice(-4)}`
+          : finalName;
+        const nextPlaylist = {
+          id: Date.now().toString(),
+          name: safeName,
+          color: randomColor(),
+          tracks: resolved,
+        };
+        return [...prev, nextPlaylist];
+      });
+
+      setLibrarySubView('playlists');
+      setPlaylistImportState({ inProgress: false, message: `Imported ${resolved.length} tracks.` });
+    } catch (error) {
+      logError('app.handlePlaylistImportChange', error);
+      setPlaylistImportState({ inProgress: false, message: 'Playlist import failed.' });
+    }
+  }, [ensurePlaylistAccess, resolveImportedTrack, setPlaylists]);
+
   const contextMenuActions = [handlePlayNextFromMenu, handleStartRadioFromMenu, handleDownloadTrack, handleToggleFavoriteFromMenu, handleOpenIssueReportFromMenu];
 
   useEffect(() => {
@@ -1941,10 +2184,7 @@ function App() {
           <div className="section-header-actions">
             <button
               className="section-action-btn"
-              onClick={() => {
-                const name = window.prompt('Rename playlist', playlist.name);
-                if (name?.trim()) renamePlaylist(playlist.id, name.trim());
-              }}
+              onClick={() => openRenamePlaylistEditor(playlist)}
               type="button"
             >
               <Pencil size={14} /> Rename
@@ -2621,11 +2861,16 @@ function App() {
               <section className="track-section">
                 <div className="section-header">
                   <h2>Playlists</h2>
-                  <button className="section-action-btn" onClick={() => {
-                    const name = prompt('Playlist name:');
-                    if (name?.trim()) createPlaylist(name.trim());
-                  }} type="button"><ListPlus size={14} /> New</button>
+                  <div className="section-header-actions">
+                    <button className="section-action-btn" onClick={handlePlaylistImportClick} type="button"><Upload size={14} /> Import</button>
+                    <button className="section-action-btn" onClick={openCreatePlaylistEditor} type="button"><ListPlus size={14} /> New</button>
+                  </div>
                 </div>
+                {playlistImportState.message && (
+                  <p className="settings-row-text" style={{ marginBottom: 10 }}>
+                    {playlistImportState.message}
+                  </p>
+                )}
                 {playlists.length === 0 ? (
                   <div className="empty-state">No playlists yet. Create one!</div>
                 ) : (
@@ -2750,6 +2995,41 @@ function App() {
       <EqualizerModal isOpen={isEqualizerOpen} onClose={() => setIsEqualizerOpen(false)} />
       <LyricsModal isOpen={isLyricsOpen} onClose={() => setIsLyricsOpen(false)} />
       <QueueViewer isOpen={isQueueOpen} onClose={() => setIsQueueOpen(false)} />
+      {playlistEditor.open && (
+        <div className="modal-overlay" onClick={closePlaylistEditor}>
+          <div
+            className="modal modal-content"
+            role="dialog"
+            aria-modal="true"
+            aria-label={playlistEditor.mode === 'create' ? 'Create playlist' : 'Rename playlist'}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>{playlistEditor.mode === 'create' ? 'Create playlist' : 'Rename playlist'}</h3>
+            <form onSubmit={submitPlaylistEditor}>
+              <input
+                type="text"
+                className="modal-input"
+                placeholder="Playlist name"
+                value={playlistEditor.name}
+                maxLength={60}
+                autoFocus
+                onChange={(event) => setPlaylistEditor((prev) => ({
+                  ...prev,
+                  name: event.target.value,
+                  error: '',
+                }))}
+              />
+              {playlistEditor.error && <p className="error-text" style={{ marginBottom: 10 }}>{playlistEditor.error}</p>}
+              <div className="modal-actions">
+                <button className="btn-secondary" onClick={closePlaylistEditor} type="button">Cancel</button>
+                <button className="btn-primary" type="submit">
+                  {playlistEditor.mode === 'create' ? 'Create' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <AuthModal
         key={`${authSession?.user?.id || 'guest'}-${authModalMode}`}
         isOpen={isAuthModalOpen}
@@ -2771,6 +3051,13 @@ function App() {
         ref={libraryImportInputRef}
         accept="application/json,.json"
         onChange={handleImportLibraryChange}
+        style={{ display: 'none' }}
+        type="file"
+      />
+      <input
+        ref={playlistImportInputRef}
+        accept=".m3u,.m3u8,.pls,.txt,.csv,.json,application/json,text/plain,text/csv,audio/x-mpegurl,application/x-mpegurl"
+        onChange={handlePlaylistImportChange}
         style={{ display: 'none' }}
         type="file"
       />

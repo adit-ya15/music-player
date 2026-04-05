@@ -109,11 +109,18 @@ export const youtubeApi = {
     return result.data;
   },
 
-  getStreamDetailsSafe: async (videoId) => {
+  getStreamDetailsSafe: async (videoId, options = {}) => {
+    const { title = '', artist = '' } = options || {};
     const result = await requestYoutube(
       'youtube.getStreamDetails',
       `/stream/${videoId}`,
-      { timeout: 15000 },
+      {
+        params: {
+          title: String(title || '').trim(),
+          artist: String(artist || '').trim(),
+        },
+        timeout: 15000,
+      },
       'Stream is unavailable right now.'
     );
 
@@ -129,11 +136,13 @@ export const youtubeApi = {
   },
 
   // Client should always consume direct stream URLs and avoid backend proxy streaming.
-  getStreamDetails: async (videoId, { preferDirect = false } = {}) => {
+  getStreamDetails: async (videoId, { preferDirect = false, title = '', artist = '' } = {}) => {
     const requestedDirect = Boolean(preferDirect);
-    const result = await youtubeApi.getStreamDetailsSafe(videoId);
+    const result = await youtubeApi.getStreamDetailsSafe(videoId, { title, artist });
     const directUrl = result.ok ? result.data?.streamUrl : null;
-    const validated = directUrl ? await validateStreamUrl(directUrl) : false;
+    const validated = directUrl
+      ? (requestedDirect ? true : await validateStreamUrl(directUrl))
+      : false;
 
     return {
       videoId,

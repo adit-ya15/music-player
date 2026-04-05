@@ -384,7 +384,7 @@ button { border: none; background: transparent; cursor: pointer; font-family: in
 .search-wrapper {
     position: relative;
     width: 100%;
-    z-index: 100;
+    z-index: 40;
 }
 
 .search-container {
@@ -422,6 +422,7 @@ button { border: none; background: transparent; cursor: pointer; font-family: in
     top: calc(100% + 6px);
     left: 0;
     right: 0;
+    z-index: 45;
     border-radius: var(--radius-lg);
     padding: 6px;
     max-height: 400px;

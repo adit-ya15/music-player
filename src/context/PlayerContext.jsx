@@ -62,6 +62,7 @@ const AUTO_RADIO_STORAGE_KEY = "aura-auto-radio";
 const PLAYBACK_PROFILE_STORAGE_KEY = "aura-playback-profile";
 const OFFLINE_ONLY_STORAGE_KEY = "aura-offline-only";
 const RESUME_STORAGE_KEY = "aura-resume-state";
+const TASTE_PROFILE_STORAGE_KEY = "aura-taste-profile";
 const RECO_NOISE_TOKENS = new Set([
   'song',
   'songs',
@@ -130,6 +131,14 @@ function normalizeRecoText(value) {
     .trim();
 }
 
+function normalizeRecoTitle(value) {
+  return normalizeRecoText(value)
+    .replace(/\b\d{4}\b/g, ' ')
+    .replace(/\b(feat|ft|version|official|audio|video|lyrics|lyric|remastered|remaster)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function tokenizeRecoText(value) {
   return normalizeRecoText(value)
     .split(' ')
@@ -154,6 +163,13 @@ function hasWordOverlap(seedText, candidateText) {
 function shouldRejectCandidate(seedTrack, candidate) {
   const candidateArtist = String(candidate?.artist || '').trim().toLowerCase();
   if (!candidateArtist || candidateArtist === 'unknown artist') return true;
+
+  const seedTitle = normalizeRecoTitle(seedTrack?.title || '');
+  const candidateTitle = normalizeRecoTitle(candidate?.title || '');
+  if (seedTitle && candidateTitle && seedTitle === candidateTitle) {
+    // Avoid replaying alternate uploads/covers of the same song title in radio mode.
+    return true;
+  }
 
   const seedComposite = `${seedTrack?.title || ''} ${seedTrack?.artist || ''}`;
   const candidateComposite = `${candidate?.title || ''} ${candidate?.artist || ''}`;
@@ -219,7 +235,19 @@ function rankRecommendationCandidates(seedTrack, candidates, options = {}) {
   });
 
   const picked = (relevant.length > 0 ? relevant : ranked.slice(0, minimumCount)).slice(0, maxCount);
-  return picked.map((item) => item.track);
+
+  const artistCounts = new Map();
+  const diversified = [];
+  for (const item of picked) {
+    const artistKey = normalizeRecoText(item.track?.artist || 'unknown');
+    const count = artistCounts.get(artistKey) || 0;
+    if (count >= 3) continue;
+    artistCounts.set(artistKey, count + 1);
+    diversified.push(item.track);
+    if (diversified.length >= maxCount) break;
+  }
+
+  return diversified.length >= minimumCount ? diversified : picked.map((item) => item.track);
 }
 
 function buildSimilarityQueries(seedTrack) {
@@ -230,10 +258,79 @@ function buildSimilarityQueries(seedTrack) {
 
   if (title && artist) queries.add(`${title} ${artist}`.trim());
   if (title && album) queries.add(`${title} ${album}`.trim());
-  if (title) queries.add(`${title} soundtrack`);
-  if (title) queries.add(`${title} hindi`);
+  if (artist) queries.add(`${artist} popular songs`);
+  if (artist && title) queries.add(`${artist} songs like ${title}`);
+  if (title) queries.add(`${title} similar songs`);
 
   return [...queries].filter(Boolean);
+}
+
+function createEmptyTasteProfile() {
+  return {
+    likedArtistCounts: {},
+    skippedArtistCounts: {},
+    likedTrackIds: {},
+    skippedTrackIds: {},
+  };
+}
+
+function normalizeTasteProfile(value) {
+  const base = createEmptyTasteProfile();
+  if (!value || typeof value !== 'object') return base;
+  return {
+    likedArtistCounts: value.likedArtistCounts && typeof value.likedArtistCounts === 'object' ? value.likedArtistCounts : {},
+    skippedArtistCounts: value.skippedArtistCounts && typeof value.skippedArtistCounts === 'object' ? value.skippedArtistCounts : {},
+    likedTrackIds: value.likedTrackIds && typeof value.likedTrackIds === 'object' ? value.likedTrackIds : {},
+    skippedTrackIds: value.skippedTrackIds && typeof value.skippedTrackIds === 'object' ? value.skippedTrackIds : {},
+  };
+}
+
+function capTasteMap(mapObject = {}, maxSize = 220) {
+  const entries = Object.entries(mapObject || {})
+    .map(([key, value]) => [key, Number(value) || 0])
+    .filter(([key, value]) => key && value > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxSize);
+  return Object.fromEntries(entries);
+}
+
+function adjustRecommendationWithTaste(track, profile) {
+  if (!track || !profile) return 0;
+  const artistKey = normalizeRecoText(track.artist || '');
+  const trackKey = String(track.id || '');
+
+  const likedArtist = Number(profile.likedArtistCounts?.[artistKey] || 0);
+  const skippedArtist = Number(profile.skippedArtistCounts?.[artistKey] || 0);
+  const likedTrack = Number(profile.likedTrackIds?.[trackKey] || 0);
+  const skippedTrack = Number(profile.skippedTrackIds?.[trackKey] || 0);
+
+  const affinityBoost = Math.min(0.24, likedArtist * 0.03) + Math.min(0.2, likedTrack * 0.05);
+  const penalty = Math.min(0.32, skippedArtist * 0.04) + Math.min(0.3, skippedTrack * 0.06);
+
+  return affinityBoost - penalty;
+}
+
+async function resolveRecommendationAnchorTrack(seedTrack) {
+  if (!seedTrack) return null;
+  if (seedTrack.videoId || (seedTrack.source === 'youtube' && seedTrack.id)) return seedTrack;
+
+  const anchorQuery = `${String(seedTrack.title || '').trim()} ${String(seedTrack.artist || '').trim()}`.trim();
+  if (!anchorQuery) return seedTrack;
+
+  try {
+    const anchorRes = await youtubeApi.searchSongsSafe(anchorQuery, 10);
+    if (!anchorRes.ok || !Array.isArray(anchorRes.data) || !anchorRes.data.length) {
+      return seedTrack;
+    }
+    const ranked = rankRecommendationCandidates(seedTrack, anchorRes.data, {
+      minScore: 0.2,
+      minimumCount: 1,
+      maxCount: 3,
+    });
+    return ranked[0] || anchorRes.data[0] || seedTrack;
+  } catch {
+    return seedTrack;
+  }
 }
 
 export const usePlayer = () => useContext(PlayerContext);
@@ -268,9 +365,10 @@ export const PlayerProvider = ({ children }) => {
   });
   const [playbackProfile, setPlaybackProfileState] = useState(() => {
     try {
-      return normalizePlaybackProfile(localStorage.getItem(PLAYBACK_PROFILE_STORAGE_KEY));
+      const stored = localStorage.getItem(PLAYBACK_PROFILE_STORAGE_KEY);
+      return stored == null ? "instant" : normalizePlaybackProfile(stored);
     } catch {
-      return "balanced";
+      return "instant";
     }
   });
   const [offlineOnlyMode, setOfflineOnlyModeState] = useState(() => {
@@ -283,6 +381,7 @@ export const PlayerProvider = ({ children }) => {
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState(null);
   const [volume, setVolumeState] = useState(0.8);
   const [resumeState, setResumeState] = useState(() => normalizeResumeState(readStoredJson(RESUME_STORAGE_KEY, null)));
+  const [tasteProfile, setTasteProfile] = useState(() => normalizeTasteProfile(readStoredJson(TASTE_PROFILE_STORAGE_KEY, null)));
   const [equalizerState, setEqualizerState] = useState({
     available: false,
     enabled: false,
@@ -318,6 +417,7 @@ export const PlayerProvider = ({ children }) => {
   const nativeQueueSyncSeqRef = useRef(0);
   const resolvedTrackMapRef = useRef(new Map());
   const resumeSeekRef = useRef(null);
+  const tasteProfileRef = useRef(tasteProfile);
 
   /* ── Gapless playback: pre-resolve next track URL ── */
   const preResolvedRef = useRef({ trackId: null, resolvedTrack: null, resolving: false });
@@ -347,6 +447,32 @@ export const PlayerProvider = ({ children }) => {
   }, []);
 
   const clearPlaybackRecovery = useCallback(() => {}, []);
+
+  const recordTasteSignal = useCallback((signal, track) => {
+    if (!track?.id || !signal) return;
+    const trackKey = String(track.id);
+    const artistKey = normalizeRecoText(track.artist || 'unknown');
+
+    setTasteProfile((previous) => {
+      const next = normalizeTasteProfile(previous);
+
+      if (signal === 'like') {
+        next.likedArtistCounts[artistKey] = Number(next.likedArtistCounts[artistKey] || 0) + 1;
+        next.likedTrackIds[trackKey] = Number(next.likedTrackIds[trackKey] || 0) + 1;
+        if (next.skippedTrackIds[trackKey]) delete next.skippedTrackIds[trackKey];
+      } else if (signal === 'skip') {
+        next.skippedArtistCounts[artistKey] = Number(next.skippedArtistCounts[artistKey] || 0) + 1;
+        next.skippedTrackIds[trackKey] = Number(next.skippedTrackIds[trackKey] || 0) + 1;
+      }
+
+      return {
+        likedArtistCounts: capTasteMap(next.likedArtistCounts),
+        skippedArtistCounts: capTasteMap(next.skippedArtistCounts),
+        likedTrackIds: capTasteMap(next.likedTrackIds),
+        skippedTrackIds: capTasteMap(next.skippedTrackIds),
+      };
+    });
+  }, []);
 
   const mergeResolvedTrack = useCallback((baseTrack, patch = {}) => ({
     ...baseTrack,
@@ -581,14 +707,6 @@ export const PlayerProvider = ({ children }) => {
     setIsLoading(true);
     setPlaybackError(null);
 
-    try {
-      await MusicPlayer.pause();
-    } catch {
-      // ignore (web/no plugin)
-    }
-
-    if (seq !== playSeqRef.current) return;
-
     setIsPlaying(false);
     setProgress(0);
     setDuration(0);
@@ -606,6 +724,14 @@ export const PlayerProvider = ({ children }) => {
         preResolvedRef.current = { trackId: null, resolvedTrack: null, resolving: false };
       } else {
         resolvedTrack = await resolvePlayableTrack(track, { reason: 'playback' });
+      }
+
+      if (seq !== playSeqRef.current) return;
+
+      try {
+        await MusicPlayer.pause();
+      } catch {
+        // ignore (web/no plugin)
       }
 
       if (seq !== playSeqRef.current) return;
@@ -785,8 +911,10 @@ export const PlayerProvider = ({ children }) => {
       const currentQueue = queueRef.current;
       const queueIds = new Set(currentQueue.map((track) => track.id));
 
-      // Strategy 1: YouTube Music "Up Next" (highest-quality autoplay)
-      const videoId = seedTrack.videoId || (seedTrack.source === 'youtube' ? seedTrack.id.replace(/^yt-/, '') : null);
+      const anchorTrack = await resolveRecommendationAnchorTrack(seedTrack);
+
+      // Strategy 1: YouTube Music "Up Next" from the best matching anchor track.
+      const videoId = anchorTrack?.videoId || (anchorTrack?.source === 'youtube' ? anchorTrack.id.replace(/^yt-/, '') : null);
       if (videoId) {
         try {
           const upNext = await youtubeApi.getUpNextSafe(videoId);
@@ -827,7 +955,13 @@ export const PlayerProvider = ({ children }) => {
         minScore: 0.3,
         minimumCount: 6,
         maxCount: 20,
-      });
+      })
+        .map((track) => ({
+          track,
+          score: scoreRecommendation(seedTrack, track) + adjustRecommendationWithTaste(track, tasteProfileRef.current),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.track);
     } catch (error) {
       console.error('Recommendation fetch failed:', error);
       return [];
@@ -838,7 +972,16 @@ export const PlayerProvider = ({ children }) => {
 
   /* -------------------------- NEXT TRACK -------------------------- */
 
-  const skipNext = useCallback(async () => {
+  const skipNext = useCallback(async (options = {}) => {
+
+    const { reason = 'manual' } = options;
+
+    if (reason === 'manual' && currentTrack && duration > 0) {
+      const skipRatio = progress / duration;
+      if (skipRatio < 0.48) {
+        recordTasteSignal('skip', currentTrack);
+      }
+    }
 
     if (!queue.length) return;
 
@@ -896,7 +1039,7 @@ export const PlayerProvider = ({ children }) => {
       return;
     }
 
-  }, [queue, queueIndex, shuffleMode, repeatMode, loadAndPlay, currentTrack, fetchRecommendations]);
+  }, [queue, queueIndex, shuffleMode, repeatMode, loadAndPlay, currentTrack, fetchRecommendations, duration, progress, recordTasteSignal]);
 
   /* -------------------------- PREVIOUS -------------------------- */
 
@@ -1003,7 +1146,8 @@ export const PlayerProvider = ({ children }) => {
     try {
       const results = [];
 
-      const videoId = seedTrack.videoId || (seedTrack.source === 'youtube' ? seedTrack.id.replace(/^yt-/, '') : null);
+      const anchorTrack = await resolveRecommendationAnchorTrack(seedTrack);
+      const videoId = anchorTrack?.videoId || (anchorTrack?.source === 'youtube' ? anchorTrack.id.replace(/^yt-/, '') : null);
       if (videoId) {
         try {
           const upNext = await youtubeApi.getUpNextSafe(videoId);
@@ -1039,7 +1183,13 @@ export const PlayerProvider = ({ children }) => {
         minScore: 0.3,
         minimumCount: 5,
         maxCount: 15,
-      });
+      })
+        .map((track) => ({
+          track,
+          score: scoreRecommendation(seedTrack, track) + adjustRecommendationWithTaste(track, tasteProfileRef.current),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.track);
     } catch {
       return [];
     }
@@ -1113,6 +1263,7 @@ export const PlayerProvider = ({ children }) => {
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+  useEffect(() => { tasteProfileRef.current = tasteProfile; }, [tasteProfile]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { loadAndPlayRef.current = loadAndPlay; }, [loadAndPlay]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -1133,6 +1284,14 @@ export const PlayerProvider = ({ children }) => {
       // ignore storage failures
     }
   }, [playbackProfile]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TASTE_PROFILE_STORAGE_KEY, JSON.stringify(tasteProfile));
+    } catch {
+      // ignore storage failures
+    }
+  }, [tasteProfile]);
 
   useEffect(() => {
     try {
@@ -1243,6 +1402,45 @@ export const PlayerProvider = ({ children }) => {
     const boundedIndex = Math.max(0, Math.min(nextIndex, nextQueue.length - 1));
     setQueue(nextQueue);
     setQueueIndex(boundedIndex);
+  }, [queue, queueIndex]);
+
+  const optimizeQueueFlow = useCallback(() => {
+    if (!queue.length) return;
+    const current = queueIndex >= 0 && queueIndex < queue.length ? queue[queueIndex] : null;
+    const rest = queue.filter((_, index) => index !== queueIndex);
+    if (!rest.length) return;
+
+    const bins = new Map();
+    for (const track of rest) {
+      const artistKey = normalizeRecoText(track?.artist || 'unknown');
+      const list = bins.get(artistKey) || [];
+      list.push(track);
+      bins.set(artistKey, list);
+    }
+
+    const reflowed = [];
+    while (bins.size > 0) {
+      const keys = [...bins.keys()].sort((left, right) => {
+        const leftBoost = Number(tasteProfileRef.current?.likedArtistCounts?.[left] || 0);
+        const rightBoost = Number(tasteProfileRef.current?.likedArtistCounts?.[right] || 0);
+        if (rightBoost !== leftBoost) return rightBoost - leftBoost;
+        return (bins.get(right)?.length || 0) - (bins.get(left)?.length || 0);
+      });
+
+      for (const key of keys) {
+        const bucket = bins.get(key) || [];
+        if (!bucket.length) {
+          bins.delete(key);
+          continue;
+        }
+        reflowed.push(bucket.shift());
+        if (!bucket.length) bins.delete(key);
+      }
+    }
+
+    const nextQueue = current ? [current, ...reflowed] : reflowed;
+    setQueue(nextQueue);
+    setQueueIndex(current ? 0 : Math.max(0, queueIndex));
   }, [queue, queueIndex]);
 
   /* -------------------------- SLEEP TIMER WITH FADE -------------------------- */
@@ -1392,7 +1590,7 @@ export const PlayerProvider = ({ children }) => {
           }
 
           // All other cases: skipNext handles autoplay, shuffle, repeat-all
-          skipNextRef.current?.();
+          skipNextRef.current?.({ reason: 'natural' });
         });
 
         prevListener = await MusicPlayer.addListener('prevTrack', () => {
@@ -1452,15 +1650,21 @@ export const PlayerProvider = ({ children }) => {
 
     const remaining = queue.length - 1 - queueIndex;
 
-    if (remaining <= 2 && !isFetchingRecsRef.current && pendingRecsRef.current.length === 0) {
+    if (remaining <= 4 && !isFetchingRecsRef.current && pendingRecsRef.current.length === 0) {
       const seed = queue[queue.length - 1] || currentTrack;
       if (seed) {
         fetchRecommendations(seed).then(recs => {
-          if (recs.length > 0) pendingRecsRef.current = recs;
+          if (recs.length > 0) {
+            pendingRecsRef.current = recs;
+            if (playbackProfile !== 'data-saver') {
+              preResolveStream(recs[0]);
+              if (recs[1]) preResolveStream(recs[1]);
+            }
+          }
         }).catch(() => {});
       }
     }
-  }, [queueIndex, queue, autoRadioEnabled, currentTrack, fetchRecommendations]);
+  }, [queueIndex, queue, autoRadioEnabled, currentTrack, fetchRecommendations, playbackProfile, preResolveStream]);
 
   useEffect(() => {
     if (playbackProfile !== "instant") return;
@@ -1641,7 +1845,9 @@ export const PlayerProvider = ({ children }) => {
     removeFromQueue,
     clearQueue,
     moveQueueItem,
-    dedupeQueue
+    dedupeQueue,
+    optimizeQueueFlow,
+    recordTasteSignal
 
   };
 

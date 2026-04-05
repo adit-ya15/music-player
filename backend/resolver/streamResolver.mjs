@@ -7,6 +7,7 @@ import { invidiousGetAudioUrl } from '../providers/invidiousProvider.mjs';
 import { pipedGetAudioUrl } from '../providers/pipedProvider.mjs';
 import { saavnGetAudioUrl } from '../providers/saavnProvider.mjs';
 import { ytdlCoreGetAudioUrl } from '../providers/ytdlCoreProvider.mjs';
+import { youtubeiGetAudioUrl } from '../providers/youtubeiProvider.mjs';
 import { ytdlpGetUrl } from '../providers/ytdlpProvider.mjs';
 import { ytdlpQueue } from '../queue/ytdlpQueue.mjs';
 import { isStreamAlive } from '../utils/validateStream.mjs';
@@ -18,9 +19,9 @@ const PRIMARY_TIMEOUT_MS = Math.max(500, Number(process.env.PRIMARY_TIMEOUT_MS |
 const QUICK_FALLBACK_TIMEOUT_MS = Math.max(500, Number(process.env.QUICK_FALLBACK_TIMEOUT_MS || 2500));
 const FALLBACK_TIMEOUT_MS = Math.max(
   500,
-  Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 20000)
+  Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 9000)
 );
-const ENABLE_YT_FALLBACKS = String(process.env.ENABLE_YT_FALLBACKS || '').trim().toLowerCase() === 'true';
+const ENABLE_YT_FALLBACKS = String(process.env.ENABLE_YT_FALLBACKS || 'true').trim().toLowerCase() !== 'false';
 const YTDLP_CLIENTS = String(process.env.YT_DLP_FALLBACK_CLIENTS || 'android,ios,mweb')
   .split(',')
   .map((value) => value.trim())
@@ -81,6 +82,7 @@ function streamKey(videoId) {
 }
 
 async function resolveStreamWithMetaInternal({
+  innertube,
   ytdlpBin,
   cache,
   videoId,
@@ -160,6 +162,11 @@ async function resolveStreamWithMetaInternal({
       return await ytdlCoreGetAudioUrl(videoId);
     };
 
+    const youtubeiFallback = async () => {
+      if (!innertube) return null;
+      return await youtubeiGetAudioUrl(innertube, videoId);
+    };
+
     const pipedFallback = async () => {
       return await pipedGetAudioUrl(videoId);
     };
@@ -176,7 +183,7 @@ async function resolveStreamWithMetaInternal({
 
     try {
       const url = await withTimeout(
-        retry(primary, 2, {
+        retry(primary, 1, {
           delayMs: 150,
           onError: (err) => logger.warn('resolver', 'yt-dlp attempt failed', { videoId, error: err?.message }),
         }),
@@ -200,15 +207,15 @@ async function resolveStreamWithMetaInternal({
 
     const fallbacks = ENABLE_YT_FALLBACKS ? [
       {
-        name: 'saavn',
+        name: 'ytdl-core',
         metric: 'resolver.secondary.success',
-        fn: saavnFallback,
+        fn: ytdlCoreFallback,
         timeoutMs: PRIMARY_TIMEOUT_MS,
       },
       {
-        name: 'ytdl-core',
-        metric: 'resolver.fallback.used',
-        fn: ytdlCoreFallback,
+        name: 'youtubei',
+        metric: 'resolver.secondary.success',
+        fn: youtubeiFallback,
         timeoutMs: PRIMARY_TIMEOUT_MS,
       },
       {
@@ -222,6 +229,12 @@ async function resolveStreamWithMetaInternal({
         metric: 'resolver.fallback.used',
         fn: invidiousFallback,
         timeoutMs: QUICK_FALLBACK_TIMEOUT_MS,
+      },
+      {
+        name: 'saavn',
+        metric: 'resolver.fallback.used',
+        fn: saavnFallback,
+        timeoutMs: PRIMARY_TIMEOUT_MS,
       },
     ] : [];
 

@@ -1,17 +1,37 @@
 {
+  "id": "/",
   "name": "Null",
   "short_name": "Null",
-  "description": "Null is a resilient music player with smart fallback streaming, offline playback, and synced lyrics.",
+  "description": "Null is a premium music player with fast discovery, offline downloads, synced lyrics, and resilient playback.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
+  "categories": ["music", "entertainment", "audio"],
+  "lang": "en-US",
   "icons": [
     {
       "src": "/null-logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "description": "Find songs, artists, and playlists quickly",
+      "url": "/?view=search"
+    },
+    {
+      "name": "Library",
+      "short_name": "Library",
+      "description": "Open your saved songs, playlists, and downloads",
+      "url": "/?view=library"
     }
   ]
 }

@@ -60,7 +60,7 @@ function collectStdout(proc, limit = 64 * 1024) {
 export function buildYtdlpArgs(videoId, options = {}) {
   const {
     extractorArgs = process.env.YT_EXTRACTOR_ARGS || '',
-    format = process.env.YT_DLP_FORMAT || '251/250/249/140/139/best',
+    format = process.env.YT_DLP_FORMAT || '251/250/249/140/141/140/bestaudio/best',
     sourceAddress = process.env.YT_SOURCE_ADDRESS,
     playerClient = process.env.YT_PLAYER_CLIENTS || 'web',
     jsRuntimes = process.env.YT_DLP_JS_RUNTIMES || 'node',
@@ -144,7 +144,7 @@ function isNonRetryableYtdlpError(stderr = '') {
 export async function ytdlpGetUrl(bin, videoId, options = {}) {
   const timeoutMs = Math.max(
     1000,
-    Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 8000)
+    Number(process.env.YTDLP_TIMEOUT_MS || process.env.YTDLP_TIMEOUT || 4500)
   );
   const args = buildYtdlpArgs(videoId, { ...options, getUrl: true });
 

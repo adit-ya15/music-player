@@ -14,6 +14,7 @@ export default function QueueViewer({ isOpen, onClose }) {
     clearQueue,
     moveQueueItem,
     dedupeQueue,
+    optimizeQueueFlow,
   } = usePlayer();
 
   if (!isOpen) return null;
@@ -26,13 +27,24 @@ export default function QueueViewer({ isOpen, onClose }) {
           <h2 id="queue-title">Up Next</h2>
           <div className="queue-header-actions">
             {queue.length > 2 && (
-              <button className="queue-clear-btn" onClick={dedupeQueue} aria-label="Remove duplicate tracks" title="Remove duplicates" type="button">
+              <button
+                className="queue-clear-btn"
+                onClick={optimizeQueueFlow}
+                aria-label="Smart mix queue"
+                title="Smart Mix"
+                type="button"
+              >
                 <Sparkles size={16} />
+              </button>
+            )}
+            {queue.length > 2 && (
+              <button className="queue-clear-btn" onClick={dedupeQueue} aria-label="Remove duplicate tracks" title="Remove duplicates" type="button">
+                <Trash2 size={16} />
               </button>
             )}
             {queue.length > 1 && (
               <button className="queue-clear-btn" onClick={clearQueue} aria-label="Clear queue" title="Clear queue" type="button">
-                <Trash2 size={16} />
+                <X size={16} />
               </button>
             )}
             <button className="close-btn" onClick={onClose} aria-label="Close queue" type="button">

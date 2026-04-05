@@ -497,6 +497,38 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
 
     try {
         const innertube = await getYT();
+        const requestedTitle = String(req.query?.title || '').trim();
+        const requestedArtist = String(req.query?.artist || '').trim();
+
+        const findAlternateVideoIds = async ({ seedTitle = '', seedArtist = '', excludeId = '' }) => {
+            const base = `${seedTitle} ${seedArtist}`.trim();
+            if (!base) return [];
+
+            const queries = [
+                base,
+                seedTitle ? `${seedTitle} official audio` : '',
+                seedArtist ? `${seedArtist} popular songs` : '',
+            ].filter(Boolean);
+
+            const ids = new Set();
+
+            for (const query of queries) {
+                try {
+                    const searchResults = await innertube.music.search(query, { type: "song" });
+                    const songs = searchResults?.songs?.contents || [];
+                    for (const item of songs.slice(0, 8)) {
+                        const id = String(item?.id || '').trim();
+                        if (!id || id === excludeId || id.length !== 11) continue;
+                        ids.add(id);
+                        if (ids.size >= 8) return [...ids];
+                    }
+                } catch {
+                    // ignore one failed query and continue
+                }
+            }
+
+            return [...ids];
+        };
 
         let title, author, duration, thumbnail;
         try {
@@ -506,25 +538,72 @@ app.get("/api/yt/stream/:videoId", async (req, res) => {
             duration = info.basic_info?.duration;
             thumbnail = info.basic_info?.thumbnail?.[0]?.url;
         } catch {
-            // Metadata is optional for stream URL resolution.
+            try {
+                const info = await innertube.getInfo(videoId);
+                title = info?.basic_info?.title;
+                author = info?.basic_info?.author;
+                duration = info?.basic_info?.duration;
+                thumbnail = info?.basic_info?.thumbnail?.[0]?.url;
+            } catch {
+                // Metadata is optional for stream URL resolution.
+            }
         }
 
         const cache = await cachePromise;
-        const resolved = await resolveStreamWithMeta({
-            innertube,
-            ytdlpBin: YT_DLP_BIN,
-            cache,
-            videoId,
-            title,
-            artist: author,
-        });
+        let resolved = null;
+        let resolvedVideoId = videoId;
+
+        try {
+            resolved = await resolveStreamWithMeta({
+                innertube,
+                ytdlpBin: YT_DLP_BIN,
+                cache,
+                videoId,
+                title: requestedTitle || title,
+                artist: requestedArtist || author,
+            });
+        } catch {
+            resolved = null;
+        }
+
+        if (!resolved?.url) {
+            const alternates = await findAlternateVideoIds({
+                seedTitle: requestedTitle || title || '',
+                seedArtist: requestedArtist || author || '',
+                excludeId: videoId,
+            });
+
+            for (const altVideoId of alternates) {
+                try {
+                    const altResolved = await resolveStreamWithMeta({
+                        innertube,
+                        ytdlpBin: YT_DLP_BIN,
+                        cache,
+                        videoId: altVideoId,
+                        title: requestedTitle || title,
+                        artist: requestedArtist || author,
+                    });
+
+                    if (altResolved?.url) {
+                        resolved = {
+                            ...altResolved,
+                            source: `${altResolved.source || 'unknown'}-alt`,
+                        };
+                        resolvedVideoId = altVideoId;
+                        break;
+                    }
+                } catch {
+                    // continue trying alternates
+                }
+            }
+        }
 
         if (!resolved?.url) {
             return res.status(502).json({ error: "Stream unavailable" });
         }
 
         const responseData = {
-            videoId,
+            videoId: resolvedVideoId,
             title,
             author,
             duration,
@@ -802,6 +881,29 @@ app.get("/api/lyrics", async (req, res) => {
 
         if (lrclibResp.ok) {
             const data = await lrclibResp.json();
+            if ((!data?.syncedLyrics || !String(data.syncedLyrics).trim()) && data?.plainLyrics) {
+                // Try searching for an alternate match that has synced lines.
+                const searchResp = await fetch(`https://lrclib.net/api/search?${params.toString()}`, {
+                    headers: {
+                        "User-Agent": HTTP_UA,
+                        "Accept": "application/json",
+                    },
+                });
+                if (searchResp.ok) {
+                    const searchResults = await searchResp.json();
+                    const syncedCandidate = Array.isArray(searchResults)
+                        ? searchResults.find((item) => String(item?.syncedLyrics || '').trim())
+                        : null;
+                    if (syncedCandidate) {
+                        return res.json({
+                            ok: true,
+                            plainLyrics: syncedCandidate?.plainLyrics || data?.plainLyrics || "",
+                            syncedLyrics: syncedCandidate?.syncedLyrics || "",
+                            source: "lrclib",
+                        });
+                    }
+                }
+            }
             return res.json({
                 ok: true,
                 plainLyrics: data?.plainLyrics || "",
@@ -820,7 +922,9 @@ app.get("/api/lyrics", async (req, res) => {
 
             if (searchResp.ok) {
                 const results = await searchResp.json();
-                const match = Array.isArray(results) ? results[0] : null;
+                const match = Array.isArray(results)
+                    ? (results.find((item) => String(item?.syncedLyrics || '').trim()) || results[0])
+                    : null;
                 if (match) {
                     return res.json({
                         ok: true,
