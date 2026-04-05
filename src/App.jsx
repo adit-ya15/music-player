@@ -4,6 +4,15 @@ import { Play, User, Shuffle, ListPlus, Sun, Moon, ChevronRight, Heart, Clock, M
 import { usePlayer } from './context/PlayerContext';
 import { youtubeApi } from './api/youtube';
 import { jamendoApi } from './api/jamendo';
+import { soundcloudApi } from './api/soundcloud';
+import { musicbrainzApi } from './api/musicbrainz';
+import { discogsApi } from './api/discogs';
+import { spotifyMetadataApi } from './api/spotifyMetadata';
+import { deezerDashboardApi } from './api/deezerDashboard';
+import { listenbrainzDashboardApi } from './api/listenbrainzDashboard';
+import { lastfmApi } from './api/lastfm';
+import { youtubePlaylistsApi } from './api/youtubePlaylists';
+import { bandcampApi } from './api/bandcamp';
 import { nativeMediaApi } from './api/nativeMedia';
 import { recommendationsApi } from './api/recommendations';
 import { authApi } from './api/auth';
@@ -27,6 +36,7 @@ import AuthModal from './components/AuthModal';
 import { logError } from './utils/logger';
 import { buildLocalRecommendations, dedupeTracks } from './utils/recommendationFallback';
 import { emptyUserLibrary, mergeUserLibraries, normalizeLibraryPayload } from '../shared/userLibrary.js';
+import { getNuclearPluginCatalog, getPluginSetupChecklist, isPluginEnabled } from './plugins/nuclearPluginRuntime';
 
 
 
@@ -321,6 +331,7 @@ function App() {
   });
   const [smartDownloadsEnabled, setSmartDownloadsEnabled] = useLocalStorage('aura-smart-downloads', false);
   const [hasCompletedReadinessCheck, setHasCompletedReadinessCheck] = useLocalStorage('aura-readiness-check-complete', false);
+  const [disabledPluginIds, setDisabledPluginIds] = useLocalStorage('aura-disabled-plugin-ids', []);
   const [issueReportState, setIssueReportState] = useState({
     open: false,
     track: null,
@@ -339,13 +350,16 @@ function App() {
       ytResolver: false,
       auth: false,
       downloads: true,
+      plugins: true,
     },
     notes: [],
   });
   const [playbackHint, setPlaybackHint] = useState('');
+  const [pluginMetadata, setPluginMetadata] = useState(null);
   const platformLabel = Capacitor.isNativePlatform() ? 'Android app' : 'Web preview';
   const libraryImportInputRef = useRef(null);
   const playlistImportInputRef = useRef(null);
+  const lastNowPlayingTrackRef = useRef('');
 
   const downloadedTrackMap = useMemo(() => {
     const next = new Map();
@@ -374,6 +388,22 @@ function App() {
     [favorites, playlists, history],
   );
   const normalizedLibraryJson = useMemo(() => JSON.stringify(normalizedLibrary), [normalizedLibrary]);
+  const pluginCatalog = useMemo(
+    () => getNuclearPluginCatalog({ disabledIds: disabledPluginIds }),
+    [disabledPluginIds],
+  );
+  const pluginRuntimeSummary = useMemo(() => {
+    const enabled = pluginCatalog.filter((plugin) => plugin.enabled);
+    const ready = enabled.filter((plugin) => plugin.status === 'ready').length;
+    const degraded = enabled.filter((plugin) => plugin.status === 'degraded').length;
+    return {
+      total: pluginCatalog.length,
+      enabled: enabled.length,
+      ready,
+      degraded,
+    };
+  }, [pluginCatalog]);
+  const pluginSetupChecklist = useMemo(() => getPluginSetupChecklist(pluginCatalog), [pluginCatalog]);
   const currentTrackSourceId = useMemo(() => getTrackSourceId(currentTrack), [currentTrack]);
   const favoriteSourceIds = useMemo(
     () => new Set((favorites || []).map((track) => getTrackSourceId(track)).filter(Boolean)),
@@ -710,6 +740,7 @@ function App() {
         ytResolver: false,
         auth: !authSession?.token,
         downloads: !Capacitor.isNativePlatform(),
+        plugins: true,
       },
       notes: [],
     };
@@ -749,6 +780,17 @@ function App() {
       }
     }
 
+    const hasEnabledStreamingPlugin = pluginCatalog.some((plugin) => plugin.enabled && plugin.category === 'streaming');
+    const hasReadyOrDegradedStreamingPlugin = pluginCatalog.some(
+      (plugin) => plugin.enabled
+        && plugin.category === 'streaming'
+        && (plugin.status === 'ready' || plugin.status === 'degraded'),
+    );
+    next.checks.plugins = hasEnabledStreamingPlugin && hasReadyOrDegradedStreamingPlugin;
+    if (!next.checks.plugins) {
+      notes.push('No enabled streaming plugin is currently available.');
+    }
+
     if (!online) notes.push('You are offline. Downloads and local history will be prioritized.');
 
     setReadinessCheck({
@@ -758,7 +800,20 @@ function App() {
       notes,
     });
     setHasCompletedReadinessCheck(true);
-  }, [authSession?.token, ensureNativeDownloadsReady, isOffline, setHasCompletedReadinessCheck]);
+  }, [authSession?.token, ensureNativeDownloadsReady, isOffline, pluginCatalog, setHasCompletedReadinessCheck]);
+
+  const togglePlugin = useCallback((pluginId) => {
+    const id = String(pluginId || '').trim();
+    if (!id) return;
+
+    setDisabledPluginIds((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      if (current.includes(id)) {
+        return current.filter((item) => item !== id);
+      }
+      return [...current, id];
+    });
+  }, [setDisabledPluginIds]);
 
   const copyDiagnosticsSnapshot = useCallback(async () => {
     const payload = JSON.stringify(diagnosticsSnapshot, null, 2);
@@ -789,6 +844,58 @@ function App() {
     if (!currentTrack) return;
     setHistory((prev) => buildHistory(prev, currentTrack));
   }, [currentTrack, setHistory]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const run = async () => {
+      if (!currentTrack) {
+        setPluginMetadata(null);
+        return;
+      }
+
+      const tasks = [];
+      if (isPluginEnabled(pluginCatalog, 'nuclear-plugin-musicbrainz')) {
+        tasks.push(musicbrainzApi.enrichTrackSafe({ title: currentTrack.title, artist: currentTrack.artist }));
+      }
+      if (isPluginEnabled(pluginCatalog, 'nuclear-plugin-discogs')) {
+        tasks.push(discogsApi.enrichTrackSafe({ title: currentTrack.title, artist: currentTrack.artist }));
+      }
+      if (isPluginEnabled(pluginCatalog, 'nuclear-plugin-something')) {
+        tasks.push(spotifyMetadataApi.enrichTrackSafe({ title: currentTrack.title, artist: currentTrack.artist }));
+      }
+
+      if (!tasks.length) {
+        setPluginMetadata(null);
+        return;
+      }
+
+      const rows = await Promise.all(tasks);
+      if (canceled) return;
+
+      const merged = rows.filter((row) => row?.ok && row?.data).map((row) => row.data);
+      setPluginMetadata(merged.length ? merged : null);
+    };
+
+    void run();
+    return () => {
+      canceled = true;
+    };
+  }, [currentTrack, pluginCatalog]);
+
+  useEffect(() => {
+    if (!currentTrack || !isPluginEnabled(pluginCatalog, 'nuclear-plugin-lastfm')) return;
+    const trackId = getTrackSourceId(currentTrack) || currentTrack.id;
+    if (!trackId || lastNowPlayingTrackRef.current === trackId) return;
+
+    lastNowPlayingTrackRef.current = trackId;
+    void lastfmApi.sendNowPlayingSafe({
+      track: currentTrack.title,
+      artist: currentTrack.artist,
+      album: currentTrack.album,
+      durationSec: Number(currentTrack.duration || 0),
+    }).catch(() => {});
+  }, [currentTrack, pluginCatalog]);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -966,25 +1073,45 @@ function App() {
         youtubeApi.searchSongsSafe('New releases', 8),
         youtubeApi.searchSongsSafe('Popular right now', 8),
       ]);
+      let nextSections = [];
       if (!newRes.ok && !popularRes.ok) {
         if (localMixTracks.length) {
-          const offlineSections = [
+          nextSections = [
             { title: 'Recommended for You', tracks: localMixTracks },
           ];
           if (localRecentTracks.length) {
-            offlineSections.push({ title: 'Recently Played', tracks: localRecentTracks });
+            nextSections.push({ title: 'Recently Played', tracks: localRecentTracks });
           }
-          setDiscoverSections(offlineSections);
         } else {
-          setDiscoverSections([]);
+          nextSections = [];
           setDiscoverError('Could not load discover sections.');
         }
       } else {
-        setDiscoverSections([
+        nextSections = [
           { title: 'New Releases', tracks: onlyYoutube(newRes.data || []) },
           { title: 'Popular Right Now', tracks: onlyYoutube(popularRes.data || []) },
-        ]);
+        ];
       }
+
+      const dashboardTasks = [];
+      if (isPluginEnabled(pluginCatalog, 'nuclear-plugin-deezer-dashboard')) {
+        dashboardTasks.push(deezerDashboardApi.getSectionsSafe());
+      }
+      if (isPluginEnabled(pluginCatalog, 'nuclear-plugin-listenbrainz-dashboard')) {
+        dashboardTasks.push(listenbrainzDashboardApi.getSectionsSafe());
+      }
+      if (dashboardTasks.length) {
+        const dashboardRows = await Promise.all(dashboardTasks);
+        const dashboardSections = dashboardRows
+          .filter((row) => row?.ok && Array.isArray(row.data))
+          .flatMap((row) => row.data || [])
+          .filter((section) => Array.isArray(section?.tracks) && section.tracks.length > 0);
+        if (dashboardSections.length) {
+          nextSections = [...nextSections, ...dashboardSections];
+        }
+      }
+
+      setDiscoverSections(nextSections);
 
       if (seedTrack && getRecommendationsFor) {
         try {
@@ -1043,7 +1170,7 @@ function App() {
       setPersonalMix(null);
       setDailyMix(null);
     } finally { setIsDiscoverLoading(false); }
-  }, [downloadedTracks, favorites, history, getRecommendationsFor]);
+  }, [downloadedTracks, favorites, getRecommendationsFor, history, pluginCatalog]);
 
   useEffect(() => { if (activeTab === 'home' || activeTab === 'new') loadDiscover(); }, [activeTab, loadDiscover]);
 
@@ -1094,14 +1221,28 @@ function App() {
     setIsSearchLoading(true);
     setSearchError(null);
     try {
-      const [ytRes, jamendoRes] = await Promise.all([
-        youtubeApi.searchSongsSafe(term, 20),
+      const youtubeEnabled = isPluginEnabled(pluginCatalog, 'nuclear-plugin-youtube');
+      const soundcloudEnabled = isPluginEnabled(pluginCatalog, 'nuclear-plugin-soundcloud');
+      const bandcampEnabled = isPluginEnabled(pluginCatalog, 'nuclear-plugin-bandcamp');
+
+      const [ytRes, jamendoRes, soundcloudRes, bandcampRes] = await Promise.all([
+        youtubeEnabled
+          ? youtubeApi.searchSongsSafe(term, 20)
+          : Promise.resolve({ ok: false, data: [], error: 'YouTube plugin is disabled.' }),
         jamendoApi.searchSongsSafe(term, 12),
+        soundcloudEnabled
+          ? soundcloudApi.searchSongsSafe(term, 12)
+          : Promise.resolve({ ok: false, data: [], error: 'SoundCloud plugin is disabled.' }),
+        bandcampEnabled
+          ? bandcampApi.searchSongsSafe(term, 10)
+          : Promise.resolve({ ok: false, data: [], error: 'Bandcamp plugin is disabled.' }),
       ]);
 
       const combined = dedupeTracks([
         ...(ytRes.ok ? (ytRes.data || []) : []),
         ...(jamendoRes.ok ? (jamendoRes.data || []) : []),
+        ...(soundcloudRes.ok ? (soundcloudRes.data || []) : []),
+        ...(bandcampRes.ok ? (bandcampRes.data || []) : []),
       ]).slice(0, 80);
 
       if (!combined.length) {
@@ -1127,7 +1268,7 @@ function App() {
         }
 
         setSearchResults([]);
-        setSearchError(ytRes.error || jamendoRes.error || 'Search unavailable.');
+        setSearchError(ytRes.error || soundcloudRes.error || bandcampRes.error || jamendoRes.error || 'Search unavailable.');
         return;
       }
 
@@ -1143,7 +1284,7 @@ function App() {
       setSearchResults([]);
       setSearchError('Search unavailable.');
     } finally { setIsSearchLoading(false); }
-  }, [downloadedTracks, favorites, history, playlists, preResolveStream, rememberSearchTerm, searchCache, searchResults]);
+  }, [downloadedTracks, favorites, history, playlists, pluginCatalog, preResolveStream, rememberSearchTerm, searchCache, searchResults]);
 
   const openAuthModal = useCallback((mode = 'login') => {
     setAuthError('');
@@ -1804,6 +1945,70 @@ function App() {
     const firstPlayable = onlyYoutube(searchRes.data)[0] || searchRes.data[0];
     return firstPlayable || null;
   }, []);
+
+  const importYoutubePlaylistByUrl = useCallback(async (urlOrId) => {
+    if (!ensurePlaylistAccess()) return;
+    setPlaylistImportState({ inProgress: true, message: 'Importing YouTube playlist...' });
+
+    try {
+      const imported = await youtubePlaylistsApi.importByUrlSafe(urlOrId);
+      if (!imported.ok || !Array.isArray(imported.data) || !imported.data.length) {
+        setPlaylistImportState({ inProgress: false, message: imported.error || 'No tracks found in playlist.' });
+        return;
+      }
+
+      const seedEntries = imported.data
+        .map((entry) => String(entry?.videoId || entry?.id || entry?.title || '').trim())
+        .filter(Boolean)
+        .slice(0, 80)
+        .map((value) => (value.length === 11 ? `youtube:${value}` : value));
+
+      const resolved = [];
+      const seen = new Set();
+      for (const entry of seedEntries) {
+        const track = await resolveImportedTrack(entry);
+        const id = getTrackSourceId(track);
+        if (!track || !id || seen.has(id)) continue;
+        seen.add(id);
+        resolved.push(track);
+      }
+
+      if (!resolved.length) {
+        setPlaylistImportState({ inProgress: false, message: 'Could not map playlist songs to playable tracks.' });
+        return;
+      }
+
+      const finalName = `YouTube Playlist (${new Date().toLocaleDateString()})`;
+      setPlaylists((prev) => {
+        const safeName = prev.some((playlist) => playlist.name.toLowerCase() === finalName.toLowerCase())
+          ? `${finalName} ${Date.now().toString().slice(-4)}`
+          : finalName;
+        return [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            name: safeName,
+            color: randomColor(),
+            tracks: resolved,
+          },
+        ];
+      });
+
+      setLibrarySubView('playlists');
+      setPlaylistImportState({ inProgress: false, message: `Imported ${resolved.length} tracks from YouTube.` });
+    } catch (error) {
+      logError('app.importYoutubePlaylistByUrl', error);
+      setPlaylistImportState({ inProgress: false, message: 'YouTube playlist import failed.' });
+    }
+  }, [ensurePlaylistAccess, resolveImportedTrack, setPlaylists]);
+
+  const handleYoutubePlaylistImportPrompt = useCallback(() => {
+    if (!ensurePlaylistAccess()) return;
+    const input = window.prompt('Paste YouTube playlist URL or playlist ID');
+    const value = String(input || '').trim();
+    if (!value) return;
+    void importYoutubePlaylistByUrl(value);
+  }, [ensurePlaylistAccess, importYoutubePlaylistByUrl]);
 
   const handlePlaylistImportChange = useCallback(async (event) => {
     const file = event.target.files?.[0];
@@ -2644,6 +2849,11 @@ function App() {
             <span>{prettifyHealth(readinessCheck.checks.auth)}</span>
             <small>{readinessCheck.checks.auth ? 'Session is usable.' : 'Sign in again to refresh auth.'}</small>
           </div>
+          <div className="diagnostic-tile">
+            <strong>Plugin runtime</strong>
+            <span>{prettifyHealth(readinessCheck.checks.plugins)}</span>
+            <small>{readinessCheck.checks.plugins ? 'Streaming plugins are ready.' : 'Enable at least one streaming plugin.'}</small>
+          </div>
         </div>
         {readinessCheck.notes?.length > 0 && (
           <div className="readiness-notes">
@@ -2671,6 +2881,50 @@ function App() {
           </div>
         ) : (
           <p className="settings-row-text">Play a few tracks to populate source health telemetry.</p>
+        )}
+      </div>
+
+      <div className="settings-card">
+        <div className="section-header">
+          <h2>Nuclear Plugin Pack</h2>
+        </div>
+        <p className="settings-row-text">
+          Imported {pluginRuntimeSummary.total} Nuclear plugins. {pluginRuntimeSummary.ready} ready, {pluginRuntimeSummary.degraded} degraded, {pluginRuntimeSummary.enabled} enabled.
+        </p>
+        <div className="plugin-runtime-list">
+          {pluginCatalog.map((plugin) => (
+            <div key={plugin.id} className="plugin-runtime-row">
+              <div className="plugin-runtime-main">
+                <strong>{plugin.name}</strong>
+                <span>{plugin.category}</span>
+                <p>{plugin.note}</p>
+                {plugin.collaboration && <p>{plugin.collaboration}</p>}
+                {plugin.missingRequirements?.length > 0 && (
+                  <p>Missing: {plugin.missingRequirements.join(', ')}</p>
+                )}
+              </div>
+              <div className="plugin-runtime-actions">
+                <span className={`plugin-runtime-status plugin-runtime-status--${plugin.status}`}>{plugin.status}</span>
+                <button className="section-action-btn" onClick={() => togglePlugin(plugin.id)} type="button">
+                  {plugin.enabled ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {pluginSetupChecklist.length > 0 && (
+          <div className="readiness-notes" style={{ marginTop: 12 }}>
+            {pluginSetupChecklist.filter((item) => item.enabled && item.missing.length > 0).map((item) => (
+              <p key={item.id}>{item.name}: set {item.missing.join(', ')}</p>
+            ))}
+          </div>
+        )}
+        {pluginMetadata?.length > 0 && (
+          <div className="readiness-notes" style={{ marginTop: 12 }}>
+            {pluginMetadata.map((entry, index) => (
+              <p key={`${entry.source || 'meta'}-${index}`}>Metadata via {entry.source}: {JSON.stringify(entry)}</p>
+            ))}
+          </div>
         )}
       </div>
 
@@ -2879,6 +3133,7 @@ function App() {
                   <h2>Playlists</h2>
                   <div className="section-header-actions">
                     <button className="section-action-btn" onClick={handlePlaylistImportClick} type="button"><Upload size={14} /> Import</button>
+                    <button className="section-action-btn" onClick={handleYoutubePlaylistImportPrompt} type="button"><Upload size={14} /> YouTube URL</button>
                     <button className="section-action-btn" onClick={openCreatePlaylistEditor} type="button"><ListPlus size={14} /> New</button>
                   </div>
                 </div>

@@ -14,6 +14,7 @@ import { Capacitor } from '@capacitor/core';
 import { nativeMediaApi } from "../api/nativeMedia";
 import { youtubeApi } from "../api/youtube";
 import { jamendoApi } from "../api/jamendo";
+import { soundcloudApi } from "../api/soundcloud";
 import { recommendationsApi } from "../api/recommendations";
 import { getOrCreateUserId } from "../utils/userId";
 import { createMusicSources } from "../sources/musicSources";
@@ -337,7 +338,7 @@ export const usePlayer = () => useContext(PlayerContext);
 
 export const PlayerProvider = ({ children }) => {
 
-  const musicSources = useRef(createMusicSources({ youtubeApi, jamendoApi })).current;
+  const musicSources = useRef(createMusicSources({ youtubeApi, jamendoApi, soundcloudApi })).current;
 
   const [currentTrack, setCurrentTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -612,6 +613,30 @@ export const PlayerProvider = ({ children }) => {
         return resolved;
       }
 
+      if (track.source === 'soundcloud') {
+        const resolvedSoundcloud = await musicSources.soundcloud.getStreamUrl(track);
+        const streamUrl = resolvedSoundcloud?.streamUrl || existingUrl;
+        if (!streamUrl) throw new Error('SoundCloud stream unavailable');
+
+        const resolved = mergeResolvedTrack(track, {
+          streamUrl,
+          streamSource: resolvedSoundcloud?.streamSource || track.streamSource || 'soundcloud',
+          streamResolvedAt: Date.now(),
+        });
+        if (record) {
+          recordReliabilityEvent('resolved', {
+            trackId: track.id,
+            title: track.title,
+            streamSource: resolved.streamSource || 'soundcloud',
+            cacheState: null,
+            reason,
+            refreshed: forceRefresh,
+            urlKind: 'remote',
+          });
+        }
+        return resolved;
+      }
+
       if (!existingUrl) throw new Error("Stream unavailable");
       const resolved = mergeResolvedTrack(track, {
         streamUrl: existingUrl,
@@ -666,7 +691,7 @@ export const PlayerProvider = ({ children }) => {
       }
     }
     return resolved;
-  }, [getResolvedTrackFromCache, mergeResolvedTrack, musicSources.jamendo, musicSources.youtube, offlineOnlyMode, recordReliabilityEvent]);
+  }, [getResolvedTrackFromCache, mergeResolvedTrack, musicSources.jamendo, musicSources.soundcloud, musicSources.youtube, offlineOnlyMode, recordReliabilityEvent]);
 
   /** Pre-resolve stream URL for a track (used for gapless preloading). */
   const preResolveStream = useCallback(async (track) => {

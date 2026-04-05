@@ -7,6 +7,7 @@ import express from "express";
 import { Innertube } from "youtubei.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createHash } from "crypto";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import rateLimit from "express-rate-limit";
 import timeout from "connect-timeout";
@@ -97,6 +98,22 @@ const YT_EXTRACTOR_ARGS = process.env.YT_EXTRACTOR_ARGS || "";
 const YT_DLP_JS_RUNTIMES = process.env.YT_DLP_JS_RUNTIMES || "node";
 const YT_DLP_PROXY = getYtdlpProxy();
 const YT_PLAYER_SKIP = process.env.YT_PLAYER_SKIP || "webpage,configs";
+const HTTP_UA = process.env.HTTP_UA || "NullMusicPlayer/1.0 (+https://github.com)";
+
+const SPOTIFY_CLIENT_ID = String(process.env.SPOTIFY_CLIENT_ID || "").trim();
+const SPOTIFY_CLIENT_SECRET = String(process.env.SPOTIFY_CLIENT_SECRET || "").trim();
+const SPOTIFY_TOKEN_ENDPOINT = String(process.env.SPOTIFY_TOKEN_ENDPOINT || "https://accounts.spotify.com/api/token").trim();
+const SPOTIFY_API_BASE = String(process.env.SPOTIFY_API_BASE || "https://api.spotify.com/v1").replace(/\/+$/, "");
+
+const LASTFM_API_KEY = String(process.env.LASTFM_API_KEY || "").trim();
+const LASTFM_API_SECRET = String(process.env.LASTFM_API_SECRET || "").trim();
+const LASTFM_SESSION_KEY = String(process.env.LASTFM_SESSION_KEY || "").trim();
+const LASTFM_API_BASE = String(process.env.LASTFM_API_BASE || "https://ws.audioscrobbler.com/2.0/").trim();
+
+let spotifyTokenCache = {
+    accessToken: "",
+    expiresAt: 0,
+};
 
 const RECO_API_KEY = process.env.RECO_API_KEY || "";
 
@@ -1420,6 +1437,265 @@ function sanitizeFilename(value) {
         .trim()
         .slice(0, 120);
 }
+
+function hasEnv(value) {
+    return String(value || "").trim().length > 0;
+}
+
+function extractYoutubePlaylistId(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const match = text.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+    if (match?.[1]) return String(match[1]).trim();
+    if (/^[a-zA-Z0-9_-]{10,}$/.test(text)) return text;
+    return "";
+}
+
+function buildLastfmApiSig(params, secret) {
+    const keys = Object.keys(params)
+        .filter((key) => key !== "format" && key !== "callback" && params[key] != null)
+        .sort();
+    const raw = keys.map((key) => `${key}${params[key]}`).join("") + secret;
+    return createHash("md5").update(raw).digest("hex");
+}
+
+async function getSpotifyAccessToken() {
+    const now = Date.now();
+    if (spotifyTokenCache.accessToken && spotifyTokenCache.expiresAt > now + 15_000) {
+        return spotifyTokenCache.accessToken;
+    }
+
+    if (!hasEnv(SPOTIFY_CLIENT_ID) || !hasEnv(SPOTIFY_CLIENT_SECRET)) {
+        throw new Error("Spotify credentials are not configured.");
+    }
+
+    const auth = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString("base64");
+    const response = await fetch(SPOTIFY_TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": `Basic ${auth}`,
+        },
+        body: new URLSearchParams({ grant_type: "client_credentials" }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Spotify token endpoint responded with ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const token = String(payload?.access_token || "").trim();
+    const expiresIn = Math.max(30, Number(payload?.expires_in || 3600));
+    if (!token) {
+        throw new Error("Spotify token payload did not include access_token.");
+    }
+
+    spotifyTokenCache = {
+        accessToken: token,
+        expiresAt: Date.now() + expiresIn * 1000,
+    };
+
+    return spotifyTokenCache.accessToken;
+}
+
+// ─────────────────────────────────────────────
+// plugin proxy routes (client-query compatible)
+// ─────────────────────────────────────────────
+
+app.get("/api/plugins/spotify-metadata", async (req, res) => {
+    const title = String(req.query?.title || "").trim();
+    const artist = String(req.query?.artist || "").trim();
+
+    if (!title || !artist) {
+        return res.status(400).json({ ok: false, error: "title and artist query parameters are required." });
+    }
+
+    if (!hasEnv(SPOTIFY_CLIENT_ID) || !hasEnv(SPOTIFY_CLIENT_SECRET)) {
+        return res.status(503).json({ ok: false, error: "Spotify credentials are not configured on server." });
+    }
+
+    try {
+        const token = await getSpotifyAccessToken();
+        const query = `track:${title} artist:${artist}`;
+        const url = new URL(`${SPOTIFY_API_BASE}/search`);
+        url.searchParams.set("type", "track");
+        url.searchParams.set("limit", "1");
+        url.searchParams.set("q", query);
+
+        const response = await fetch(url.toString(), {
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/json",
+            },
+        });
+
+        if (!response.ok) {
+            return res.status(response.status).json({ ok: false, error: `Spotify responded with ${response.status}` });
+        }
+
+        const payload = await response.json();
+        const track = Array.isArray(payload?.tracks?.items) ? payload.tracks.items[0] : null;
+
+        return res.json({
+            ok: true,
+            trackId: track?.id || null,
+            album: track?.album?.name || null,
+            releaseDate: track?.album?.release_date || null,
+            popularity: Number(track?.popularity || 0) || null,
+            coverArt: track?.album?.images?.[0]?.url || null,
+            previewUrl: track?.preview_url || null,
+        });
+    } catch (error) {
+        logger.warn("plugins", "spotify metadata proxy failed", { error: error?.message });
+        return res.status(502).json({ ok: false, error: "Spotify metadata unavailable." });
+    }
+});
+
+app.post("/api/plugins/lastfm", async (req, res) => {
+    const method = String(req.body?.method || "").trim();
+    const track = String(req.body?.track || "").trim();
+    const artist = String(req.body?.artist || "").trim();
+    const album = String(req.body?.album || "").trim();
+    const allowedMethods = new Set(["track.updateNowPlaying", "track.scrobble"]);
+
+    if (!allowedMethods.has(method)) {
+        return res.status(400).json({ ok: false, error: "Unsupported Last.fm method." });
+    }
+
+    if (!track || !artist) {
+        return res.status(400).json({ ok: false, error: "track and artist are required." });
+    }
+
+    if (!hasEnv(LASTFM_API_KEY) || !hasEnv(LASTFM_API_SECRET) || !hasEnv(LASTFM_SESSION_KEY)) {
+        return res.status(503).json({ ok: false, error: "Last.fm credentials are not configured on server." });
+    }
+
+    const params = {
+        method,
+        api_key: LASTFM_API_KEY,
+        sk: LASTFM_SESSION_KEY,
+        track,
+        artist,
+    };
+
+    if (album) params.album = album;
+
+    if (method === "track.updateNowPlaying") {
+        const durationSec = Number(req.body?.durationSec || 0);
+        if (Number.isFinite(durationSec) && durationSec > 0) {
+            params.duration = String(Math.round(durationSec));
+        }
+    }
+
+    if (method === "track.scrobble") {
+        const rawTs = Number(req.body?.timestamp || Math.floor(Date.now() / 1000));
+        const timestamp = Number.isFinite(rawTs) && rawTs > 0
+            ? Math.floor(rawTs)
+            : Math.floor(Date.now() / 1000);
+        params.timestamp = String(timestamp);
+    }
+
+    params.api_sig = buildLastfmApiSig(params, LASTFM_API_SECRET);
+    params.format = "json";
+
+    try {
+        const response = await fetch(LASTFM_API_BASE, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": HTTP_UA,
+            },
+            body: new URLSearchParams(params),
+        });
+
+        const text = await response.text();
+        let payload = {};
+        try {
+            payload = text ? JSON.parse(text) : {};
+        } catch {
+            payload = { raw: text };
+        }
+
+        if (!response.ok || payload?.error) {
+            return res.status(response.ok ? 502 : response.status).json({
+                ok: false,
+                error: payload?.message || `Last.fm responded with ${response.status}`,
+                details: payload,
+            });
+        }
+
+        return res.json({ ok: true, data: payload });
+    } catch (error) {
+        logger.warn("plugins", "lastfm proxy failed", { error: error?.message, method });
+        return res.status(502).json({ ok: false, error: "Last.fm proxy unavailable." });
+    }
+});
+
+app.get("/api/plugins/youtube-playlist", async (req, res) => {
+    const input = String(req.query?.list || "").trim();
+    const playlistId = extractYoutubePlaylistId(input);
+    if (!playlistId) {
+        return res.status(400).json({ ok: false, error: "Invalid YouTube playlist URL or ID." });
+    }
+
+    const playlistUrl = `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
+    const maxEntries = Math.max(1, Math.min(200, Number(req.query?.max || 120)));
+    const args = [
+        "--ignore-config",
+        "--flat-playlist",
+        "--dump-single-json",
+        "--playlist-end",
+        String(maxEntries),
+        "--no-warnings",
+        playlistUrl,
+    ];
+
+    try {
+        const { proc, done } = spawnWithTimeout(YT_DLP_BIN, args, {
+            timeoutMs: Math.max(4_000, Number(process.env.YT_PLAYLIST_IMPORT_TIMEOUT_MS || 20_000)),
+        });
+
+        let stdout = "";
+        let stderr = "";
+        proc.stdout?.on("data", (chunk) => {
+            stdout += chunk.toString();
+            if (stdout.length > 2_000_000) stdout = stdout.slice(-2_000_000);
+        });
+        proc.stderr?.on("data", (chunk) => {
+            stderr += chunk.toString();
+            if (stderr.length > 40_000) stderr = stderr.slice(-40_000);
+        });
+
+        const { code } = await done;
+        if (code !== 0) {
+            return res.status(502).json({ ok: false, error: "Playlist import failed.", details: stderr.slice(-4000) });
+        }
+
+        const payload = JSON.parse(stdout || "{}");
+        const entries = (Array.isArray(payload?.entries) ? payload.entries : [])
+            .map((entry) => ({
+                videoId: String(entry?.id || "").trim(),
+                title: String(entry?.title || "").trim() || null,
+                duration: Number(entry?.duration || 0) || null,
+                channel: String(entry?.channel || entry?.uploader || "").trim() || null,
+            }))
+            .filter((entry) => entry.videoId);
+
+        return res.json({
+            ok: true,
+            playlistId,
+            title: String(payload?.title || "").trim() || null,
+            entries,
+        });
+    } catch (error) {
+        logger.warn("plugins", "youtube playlist import failed", {
+            playlistId,
+            error: error?.message,
+        });
+        return res.status(502).json({ ok: false, error: "YouTube playlist import unavailable." });
+    }
+});
 
 // ─────────────────────────────────────────────
 // serve frontend

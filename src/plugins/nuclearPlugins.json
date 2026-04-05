@@ -1,0 +1,116 @@
+{
+  "$schema": "./schema/plugins.schema.json",
+  "plugins": [
+    {
+      "id": "nuclear-plugin-discogs",
+      "name": "Discogs",
+      "description": "Fetch artist and album metadata from Discogs",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-discogs",
+      "category": "metadata",
+      "tags": ["discogs", "metadata"],
+      "addedAt": "2026-01-27T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-youtube",
+      "name": "YouTube",
+      "description": "A streaming provider plugin that plays audio from Youtube using yt-dlp",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-youtube",
+      "category": "streaming",
+      "tags": ["youtube", "streaming", "yt-dlp"],
+      "addedAt": "2026-01-28T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-bandcamp",
+      "name": "Bandcamp",
+      "description": "Browse and play music from Bandcamp",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-bandcamp",
+      "category": "metadata",
+      "tags": ["bandcamp", "metadata", "streaming"],
+      "addedAt": "2026-02-12T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-soundcloud",
+      "name": "SoundCloud",
+      "description": "Browse and play music from SoundCloud",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-soundcloud",
+      "category": "streaming",
+      "tags": ["soundcloud", "metadata", "streaming"],
+      "addedAt": "2026-02-15T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-something",
+      "name": "Spotify",
+      "description": "Fetch artist, album, and track metadata from Spotify",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-something",
+      "category": "metadata",
+      "tags": ["metadata"],
+      "addedAt": "2026-02-15T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-deezer-dashboard",
+      "name": "Deezer Dashboard",
+      "description": "Charts, trending artists, editorial playlists, and new releases from Deezer",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-deezer-dashboard",
+      "category": "dashboard",
+      "tags": ["deezer", "dashboard", "charts"],
+      "addedAt": "2026-02-19T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-musicbrainz",
+      "name": "MusicBrainz",
+      "description": "Search, artist pages, and album details from MusicBrainz with Wikipedia bios and Cover Art Archive artwork",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-musicbrainz",
+      "category": "metadata",
+      "tags": ["musicbrainz", "metadata", "wikipedia"],
+      "addedAt": "2026-02-22T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-listenbrainz-dashboard",
+      "name": "ListenBrainz Dashboard",
+      "description": "Charts, trending artists, top albums, and new releases from ListenBrainz",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-listenbrainz-dashboard",
+      "category": "dashboard",
+      "tags": ["listenbrainz", "dashboard", "charts"],
+      "addedAt": "2026-02-22T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-lastfm",
+      "name": "Last.fm",
+      "description": "Scrobble tracks and update Now Playing on your Last.fm profile",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-lastfm",
+      "category": "scrobbling",
+      "tags": ["lastfm", "scrobbling"],
+      "addedAt": "2026-03-04T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-youtube-playlists",
+      "name": "YouTube Playlists",
+      "description": "Import YouTube playlists by URL",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-youtube-playlists",
+      "category": "other",
+      "tags": ["youtube", "playlists", "yt-dlp"],
+      "addedAt": "2026-03-07T00:00:00Z"
+    },
+    {
+      "id": "nuclear-plugin-monochrome",
+      "name": "Monochrome",
+      "description": "Browse and play lossless music via Monochrome, with dashboard, playlists, and metadata",
+      "author": "nukeop",
+      "repo": "NuclearPlayer/nuclear-plugin-monochrome",
+      "category": "streaming",
+      "tags": ["monochrome", "tidal", "streaming", "metadata", "dashboard", "lossless"],
+      "addedAt": "2026-04-04T00:00:00Z"
+    }
+  ],
+  "version": 1
+}

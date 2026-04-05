@@ -14,7 +14,6 @@ const DEFAULT_MONOCHROME_ENDPOINTS = [
   'https://tidal.kinoplus.online',
   'https://tidal-uptime.jiffy-puffs-1j.workers.dev',
   'https://tidal-uptime.props-76styles.workers.dev',
-  '/api/yt/stream/{videoId}',
 ];
 
 const latencyState = new Map();

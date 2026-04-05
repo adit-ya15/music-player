@@ -1350,6 +1350,94 @@ button { border: none; background: transparent; cursor: pointer; font-family: in
     font-size: 11px;
 }
 
+.plugin-runtime-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.plugin-runtime-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--divider);
+    border-radius: var(--radius-md);
+    background: var(--surface-200);
+}
+
+.plugin-runtime-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.plugin-runtime-main strong {
+    color: var(--text-100);
+    font-size: 13px;
+}
+
+.plugin-runtime-main span {
+    color: var(--text-300);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.plugin-runtime-main p {
+    color: var(--text-200);
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.plugin-runtime-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.plugin-runtime-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    border: 1px solid var(--divider);
+    color: var(--text-200);
+    background: var(--surface-200);
+}
+
+.plugin-runtime-status--ready {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+}
+
+.plugin-runtime-status--degraded {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+}
+
+.plugin-runtime-status--catalog {
+    border-color: rgba(59, 130, 246, 0.35);
+    background: rgba(59, 130, 246, 0.12);
+    color: #93c5fd;
+}
+
+.plugin-runtime-status--disabled {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.12);
+    color: #fca5a5;
+}
+
 .source-badge {
     display: inline-flex;
     align-items: center;

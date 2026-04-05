@@ -3,21 +3,20 @@ import assert from 'node:assert/strict';
 
 import { createMusicSources } from '../src/sources/musicSources.js';
 
-test('youtube source uses backend stream result when available', async () => {
+test('youtube source uses client ytdlp resolver when available', async () => {
   const youtubeApi = {
     async searchSongsSafe() {
       return { ok: true, data: [] };
     },
-    async getStreamDetails() {
-      return {
-        streamUrl: 'https://media.example/yt-audio.webm',
-        streamSource: 'yt-dlp',
-        cacheState: 'remote',
-      };
-    },
   };
 
-  const sources = createMusicSources({ youtubeApi });
+  const sources = createMusicSources({
+    youtubeApi,
+    ytdlpResolver: async () => ({
+      streamUrl: 'https://media.example/yt-audio.webm',
+      streamSource: 'yt-dlp',
+    }),
+  });
   const resolved = await sources.youtube.getStreamUrl({ id: 'yt-abc123def45', title: 'Song', artist: 'Artist' });
 
   assert.ok(resolved);
@@ -30,17 +29,21 @@ test('youtube source falls back to monochrome resolver when direct stream is una
     async searchSongsSafe() {
       return { ok: true, data: [] };
     },
-    async getStreamDetails() {
-      return { streamUrl: null, streamSource: null, cacheState: null };
-    },
   };
 
-  const sources = createMusicSources({ youtubeApi });
-  const originalGetStreamDetails = youtubeApi.getStreamDetails;
-  youtubeApi.getStreamDetails = async () => originalGetStreamDetails();
+  const sources = createMusicSources({
+    youtubeApi,
+    ytdlpResolver: async () => null,
+    monochromeResolver: async () => ({
+      streamUrl: 'https://mono.example/audio.webm',
+      streamSource: 'monochrome',
+    }),
+  });
 
   const resolved = await sources.youtube.getStreamUrl({ id: 'yt-xyz98765432', title: 'Song', artist: 'Artist' });
-  assert.equal(resolved, null);
+  assert.ok(resolved);
+  assert.equal(resolved.streamUrl, 'https://mono.example/audio.webm');
+  assert.equal(resolved.streamSource, 'monochrome');
 });
 
 test('monochrome source resolves youtube ids', async () => {
@@ -48,12 +51,12 @@ test('monochrome source resolves youtube ids', async () => {
     async searchSongsSafe() {
       return { ok: true, data: [] };
     },
-    async getStreamDetails() {
-      return { streamUrl: null };
-    },
   };
 
-  const sources = createMusicSources({ youtubeApi });
+  const sources = createMusicSources({
+    youtubeApi,
+    monochromeResolver: async () => null,
+  });
   const resolved = await sources.monochrome.getStreamUrl({ id: 'yt-11111111111' });
 
   assert.equal(resolved, null);
@@ -63,9 +66,6 @@ test('jamendo source resolves stream with jamendo api', async () => {
   const youtubeApi = {
     async searchSongsSafe() {
       return { ok: true, data: [] };
-    },
-    async getStreamDetails() {
-      return { streamUrl: null };
     },
   };
 
@@ -104,4 +104,48 @@ test('jamendo source resolves stream with jamendo api', async () => {
   const resolved = await sources.jamendo.getStreamUrl(search.data[0]);
   assert.equal(resolved.streamUrl, 'https://jamendo.example/audio.mp3');
   assert.equal(resolved.streamSource, 'jamendo');
+});
+
+test('soundcloud source resolves stream with soundcloud api', async () => {
+  const youtubeApi = {
+    async searchSongsSafe() {
+      return { ok: true, data: [] };
+    },
+  };
+
+  const soundcloudApi = {
+    async searchSongsSafe() {
+      return {
+        ok: true,
+        data: [
+          {
+            id: 'sc-42',
+            originalId: '42',
+            title: 'SC Song',
+            artist: 'SC Artist',
+            source: 'soundcloud',
+            transcodings: [],
+          },
+        ],
+      };
+    },
+    async resolveStreamSafe() {
+      return {
+        ok: true,
+        data: {
+          streamUrl: 'https://soundcloud.example/audio.mp3',
+          streamSource: 'soundcloud',
+        },
+      };
+    },
+  };
+
+  const sources = createMusicSources({ youtubeApi, soundcloudApi });
+  const search = await sources.soundcloud.search('sc', 1);
+  assert.equal(search.ok, true);
+  assert.equal(search.data.length, 1);
+
+  const resolved = await sources.soundcloud.getStreamUrl(search.data[0]);
+  assert.equal(resolved.streamUrl, 'https://soundcloud.example/audio.mp3');
+  assert.equal(resolved.streamSource, 'soundcloud');
 });
