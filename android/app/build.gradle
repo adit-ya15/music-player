@@ -1,9 +1,16 @@
 apply plugin: 'com.android.application'
 
-def hasReleaseSigning = project.hasProperty('MYAPP_UPLOAD_STORE_FILE') &&
-    project.hasProperty('MYAPP_UPLOAD_KEY_ALIAS') &&
-    project.hasProperty('MYAPP_UPLOAD_STORE_PASSWORD') &&
-    project.hasProperty('MYAPP_UPLOAD_KEY_PASSWORD')
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def hasReleaseSigning = keystorePropertiesFile.exists() &&
+    keystoreProperties.containsKey('MYAPP_UPLOAD_STORE_FILE') &&
+    keystoreProperties.containsKey('MYAPP_UPLOAD_KEY_ALIAS') &&
+    keystoreProperties.containsKey('MYAPP_UPLOAD_STORE_PASSWORD') &&
+    keystoreProperties.containsKey('MYAPP_UPLOAD_KEY_PASSWORD')
 
 android {
     namespace = "com.aura.music"
@@ -24,10 +31,10 @@ android {
     signingConfigs {
         release {
             if (hasReleaseSigning) {
-                storeFile file(MYAPP_UPLOAD_STORE_FILE)
-                storePassword MYAPP_UPLOAD_STORE_PASSWORD
-                keyAlias MYAPP_UPLOAD_KEY_ALIAS
-                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+                storeFile file(keystoreProperties['MYAPP_UPLOAD_STORE_FILE'])
+                storePassword keystoreProperties['MYAPP_UPLOAD_STORE_PASSWORD']
+                keyAlias keystoreProperties['MYAPP_UPLOAD_KEY_ALIAS']
+                keyPassword keystoreProperties['MYAPP_UPLOAD_KEY_PASSWORD']
             }
         }
     }
