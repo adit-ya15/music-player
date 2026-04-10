@@ -17,6 +17,7 @@ import { jamendoApi } from "../api/jamendo";
 import { soundcloudApi } from "../api/soundcloud";
 import { saavnApi } from "../api/saavn";
 import { recommendationsApi } from "../api/recommendations";
+import { recordTrackPlaySafe } from "../api/trackPlay";
 import { getOrCreateUserId } from "../utils/userId";
 import { createMusicSources } from "../sources/musicSources";
 import { resolveMonochromeStream } from "../sources/monochromeSource";
@@ -456,6 +457,9 @@ export const PlayerProvider = ({ children }) => {
   const resolvedTrackMapRef = useRef(new Map());
   const resumeSeekRef = useRef(null);
   const tasteProfileRef = useRef(tasteProfile);
+  const progressRef = useRef(progress);
+  const durationRef = useRef(duration);
+  const lastTrackPlayReportRef = useRef(new Map());
 
   /* ── Gapless playback: pre-resolve next track URL ── */
   const preResolvedRef = useRef({ trackId: null, resolvedTrack: null, resolving: false });
@@ -485,6 +489,42 @@ export const PlayerProvider = ({ children }) => {
   }, []);
 
   const clearPlaybackRecovery = useCallback(() => {}, []);
+
+  const reportCurrentTrackPlay = useCallback((reason = 'switch', forcedRatio = null) => {
+    const track = currentTrackRef.current;
+    const trackId = String(track?.id || '').trim();
+    if (!trackId) return;
+
+    const playedSeconds = Math.max(0, Number(progressRef.current || 0));
+    const totalSeconds = Math.max(0, Number(durationRef.current || track?.duration || 0));
+
+    let ratio = Number.isFinite(Number(forcedRatio))
+      ? Number(forcedRatio)
+      : (totalSeconds > 0 ? playedSeconds / totalSeconds : 0);
+
+    if (!Number.isFinite(ratio)) ratio = 0;
+    ratio = Math.max(0, Math.min(1, ratio));
+
+    // Avoid polluting DNA with accidental taps, but always accept natural track ends.
+    if (reason !== 'natural-end' && ratio < 0.2 && playedSeconds < 30) {
+      return;
+    }
+
+    const now = Date.now();
+    const prevReportedAt = Number(lastTrackPlayReportRef.current.get(trackId) || 0);
+    if (prevReportedAt && now - prevReportedAt < 15000 && ratio < 0.95) {
+      return;
+    }
+    lastTrackPlayReportRef.current.set(trackId, now);
+
+    recordTrackPlaySafe({
+      track,
+      completionRatio: ratio,
+      reason,
+    }).catch(() => {
+      // keep playback path resilient
+    });
+  }, []);
 
   const recordTasteSignal = useCallback((signal, track) => {
     if (!track?.id || !signal) return;
@@ -816,6 +856,8 @@ export const PlayerProvider = ({ children }) => {
 
     const seq = ++playSeqRef.current;
 
+    reportCurrentTrackPlay('switch');
+
     setIsLoading(true);
     setPlaybackError(null);
 
@@ -955,6 +997,7 @@ export const PlayerProvider = ({ children }) => {
     clearPlaybackRecovery,
     mergeResolvedTrack,
     persistResolvedTrack,
+    reportCurrentTrackPlay,
     recordReliabilityEvent,
     resolvePlayableTrack
   ]);
@@ -1088,6 +1131,10 @@ export const PlayerProvider = ({ children }) => {
 
     const { reason = 'manual' } = options;
 
+    if (reason !== 'natural') {
+      reportCurrentTrackPlay(reason === 'manual' ? 'manual-skip' : reason);
+    }
+
     if (reason === 'manual' && currentTrack && duration > 0) {
       const skipRatio = progress / duration;
       if (skipRatio < 0.48) {
@@ -1151,11 +1198,13 @@ export const PlayerProvider = ({ children }) => {
       return;
     }
 
-  }, [queue, queueIndex, shuffleMode, repeatMode, loadAndPlay, currentTrack, fetchRecommendations, duration, progress, recordTasteSignal]);
+  }, [queue, queueIndex, shuffleMode, repeatMode, loadAndPlay, currentTrack, fetchRecommendations, duration, progress, recordTasteSignal, reportCurrentTrackPlay]);
 
   /* -------------------------- PREVIOUS -------------------------- */
 
   const skipPrev = useCallback(async () => {
+
+    reportCurrentTrackPlay('manual-prev');
 
     if (!queue.length) return;
 
@@ -1172,7 +1221,7 @@ export const PlayerProvider = ({ children }) => {
     setQueueIndex(prevIndex);
     loadAndPlay(queue[prevIndex]);
 
-  }, [queue, queueIndex, queueMode, repeatMode, loadAndPlay]);
+  }, [queue, queueIndex, queueMode, repeatMode, loadAndPlay, reportCurrentTrackPlay]);
 
   /* -------------------------- SEEK -------------------------- */
 
@@ -1380,6 +1429,8 @@ export const PlayerProvider = ({ children }) => {
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
   useEffect(() => { tasteProfileRef.current = tasteProfile; }, [tasteProfile]);
+  useEffect(() => { progressRef.current = progress; }, [progress]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { loadAndPlayRef.current = loadAndPlay; }, [loadAndPlay]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -1704,6 +1755,8 @@ export const PlayerProvider = ({ children }) => {
     (async () => {
       try {
         nextListener = await MusicPlayer.addListener('nextTrack', () => {
+          reportCurrentTrackPlay('natural-end', 1);
+
           const repeat = repeatModeRef.current;
 
           // Natural track end with repeat-one: replay
@@ -1765,7 +1818,7 @@ export const PlayerProvider = ({ children }) => {
       errorListener?.remove?.();
       queueIndexListener?.remove?.();
     };
-  }, [clearPlaybackRecovery, getResolvedTrackFromCache, recordReliabilityEvent]);
+  }, [clearPlaybackRecovery, getResolvedTrackFromCache, recordReliabilityEvent, reportCurrentTrackPlay]);
 
   /* -------------------------- PRE-FETCH RECOMMENDATIONS -------------------------- */
 

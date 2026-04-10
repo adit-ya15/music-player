@@ -1,31 +1,15 @@
-<<<<<<< HEAD
 <p align="center">
   <img src="./website/assets/favicon.png" alt="Null Music Logo" width="100" height="100" style="border-radius: 20px;" />
 </p>
 
 <h1 align="center">Null</h1>
-<p align="center"><strong>Free Music Player for Android — No Ads, No Limits</strong></p>
-=======
-# Null
-
-Open-source, Android-first music player focused on speed, resilient playback, and offline continuity.
-
-## Highlights
-
-- Fast search and metadata-rich discovery
-- Fallback-aware playback pipeline for reliability
-- Queue controls, smart dedupe, and queue optimization
-- Offline downloads and resume state handling
-- Lyrics, equalizer hooks, and Android media controls
-- Account sync for favorites, playlists, and recent listening
->>>>>>> 4da57c6f308f7540c06359908bba62fe352508c9
+<p align="center"><strong>Free Music Player for Android - No Ads, No Limits</strong></p>
 
 <p align="center">
   <a href="https://null-music.netlify.app/app-release.apk"><img src="https://img.shields.io/badge/Download-APK-FA233B?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" /></a>
   <a href="https://null-music.netlify.app"><img src="https://img.shields.io/badge/Website-Live-black?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
 </p>
 
-<<<<<<< HEAD
 <p align="center">
   <img src="https://img.shields.io/github/license/adit-ya15/music-player?color=blue&style=flat-square" alt="License" />
   <img src="https://img.shields.io/github/stars/adit-ya15/music-player?style=flat-square" alt="Stars" />
@@ -36,8 +20,48 @@ Open-source, Android-first music player focused on speed, resilient playback, an
 
 ---
 
-## ✨ What is Null?
-=======
+## What is Null
+
+Null is a free, open-source music player for Android with access to millions of songs, no ads, no subscriptions, and no tracking. It is built with React, Capacitor, and a resilient Node.js backend with fallback-aware playback.
+
+Open-source, Android-first, and focused on speed, reliable playback, and offline continuity.
+
+Website: [null-music.netlify.app](https://null-music.netlify.app)
+
+Download: [Latest APK](https://null-music.netlify.app/app-release.apk)
+
+---
+
+## Highlights
+
+- Fast search and metadata-rich discovery
+- Fallback-aware playback pipeline for reliability
+- Queue controls with dedupe and optimization
+- Offline downloads and resume state handling
+- Lyrics, equalizer hooks, and Android media controls
+- Account sync for favorites, playlists, and history
+- Music DNA profile with Sonic Twins recommendations
+
+---
+
+## Screenshots
+
+| Home | Search | Queue |
+| --- | --- | --- |
+| ![Home](./screenshots/Screenshot_2026-04-06-01-02-22-34_917bf2ce991166cdda6fa7069f598386.jpg) | ![Search](./screenshots/Screenshot_2026-04-06-01-02-49-80_917bf2ce991166cdda6fa7069f598386.jpg) | ![Queue](./screenshots/Screenshot_2026-04-06-01-04-13-03_917bf2ce991166cdda6fa7069f598386.jpg) |
+
+| Library | Playback | Features |
+| --- | --- | --- |
+| ![Library](./screenshots/Screenshot_2026-04-06-01-03-10-01_917bf2ce991166cdda6fa7069f598386.jpg) | ![Playback](./screenshots/Screenshot_2026-04-06-01-03-53-55_917bf2ce991166cdda6fa7069f598386.jpg) | ![Features](./screenshots/Screenshot_2026-04-06-01-04-35-28_917bf2ce991166cdda6fa7069f598386.jpg) |
+
+| DNA Overview | DNA Traits | DNA Helix |
+| --- | --- | --- |
+| ![DNA Overview](./screenshots/screen-dna1.jpg) | ![DNA Traits](./screenshots/screen-dna2.jpg) | ![DNA Helix](./screenshots/screen-dna3.jpg) |
+
+---
+
+## Features
+
 ### Core Playback
 
 - Search, stream, and play music from multiple sources
@@ -84,190 +108,63 @@ Open-source, Android-first music player focused on speed, resilient playback, an
 - Download and cache-aware architecture
 - Rate limiting, auth, and request timeout protections
 
-## Screenshots
-
-| Home | Search | Queue |
-| --- | --- | --- |
-| ![Home](./screenshots/Screenshot_2026-04-06-01-02-22-34_917bf2ce991166cdda6fa7069f598386.jpg) | ![Search](./screenshots/Screenshot_2026-04-06-01-02-49-80_917bf2ce991166cdda6fa7069f598386.jpg) | ![Queue](./screenshots/Screenshot_2026-04-06-01-04-13-03_917bf2ce991166cdda6fa7069f598386.jpg) |
-
-| Library | Playback | Features |
-| --- | --- | --- |
-| ![Library](./screenshots/Screenshot_2026-04-06-01-03-10-01_917bf2ce991166cdda6fa7069f598386.jpg) | ![Playback](./screenshots/Screenshot_2026-04-06-01-03-53-55_917bf2ce991166cdda6fa7069f598386.jpg) | ![Features](./screenshots/Screenshot_2026-04-06-01-04-35-28_917bf2ce991166cdda6fa7069f598386.jpg) |
+---
 
 ## Tech Stack
 
-- Frontend: React + Vite
-- Android shell: Capacitor
-- Backend API: Node.js + Express
-- Android native playback modules in android/
+| Layer | Technology |
+| --- | --- |
+| Frontend | React + Vite |
+| Android shell | Capacitor |
+| Backend API | Node.js + Express |
+| Stream resolution | yt-dlp primary with fallback strategy |
+| Lyrics | LRCLIB |
+| Auth | JWT + session persistence |
+
+---
 
 ## Repository Layout
 
-- src/: React app and player state management
-- android/: Capacitor Android shell and native integration
-- backend/: provider, resolver, cache, auth, and utility modules
-- server.mjs: API server entry point
-- shared/: shared helpers used by multiple modules
-- tests/: unit and integration tests
->>>>>>> 4da57c6f308f7540c06359908bba62fe352508c9
-
-Null is a free, open-source music player for Android with access to millions of songs — no ads, no subscriptions, no tracking. Built with React, Capacitor, and a resilient Node.js backend with multi-provider fallback playback.
-
-<<<<<<< HEAD
-> **🌐 Website:** [null-music.netlify.app](https://null-music.netlify.app)  
-> **📥 Download:** [Latest APK](https://null-music.netlify.app/app-release.apk)
+- `src/` React app and player state management
+- `android/` Capacitor Android shell and native integration
+- `backend/` provider, resolver, cache, auth, and utility modules
+- `server.mjs` API server entry point
+- `shared/` shared helpers used by multiple modules
+- `tests/` unit and integration tests
+- `website/` marketing website
 
 ---
 
-## 📱 Screenshots
-
-| Home | Now Playing | Search |
-|:---:|:---:|:---:|
-| <img src="./screenshots/Screenshot_2026-04-06-01-02-22-34_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> | <img src="./screenshots/Screenshot_2026-04-06-01-03-53-55_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> | <img src="./screenshots/Screenshot_2026-04-06-01-02-49-80_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> |
-
-| Lyrics | Equalizer | Queue |
-|:---:|:---:|:---:|
-| <img src="./screenshots/Screenshot_2026-04-06-01-03-37-77_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> | <img src="./screenshots/Screenshot_2026-04-06-01-03-46-03_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> | <img src="./screenshots/Screenshot_2026-04-06-01-04-03-97_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> |
-
-| Library | Radio | Features |
-|:---:|:---:|:---:|
-| <img src="./screenshots/Screenshot_2026-04-06-01-03-10-01_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> | <img src="./screenshots/Screenshot_2026-04-06-01-02-54-63_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> | <img src="./screenshots/Screenshot_2026-04-06-01-04-13-03_917bf2ce991166cdda6fa7069f598386.jpg" width="200" /> |
-
-| DNA Overview | DNA Traits | DNA Helix |
-|:---:|:---:|:---:|
-| <img src="./screenshots/screen-dna1.jpg" width="200" /> | <img src="./screenshots/screen-dna2.jpg" width="200" /> | <img src="./screenshots/screen-dna3.jpg" width="200" /> |
-
----
-
-## 🚀 Features
-
-### 🎵 Playback & Audio
-- **Background playback** with lockscreen and notification controls
-- **Fallback-aware playback** — multi-provider pipeline (yt-dlp → Piped → Invidious) for maximum reliability
-- **Equalizer** with 10 presets (Normal, Classical, Dance, Folk, Heavy Metal, Hip Hop, Jazz, Pop, Rock, Flat)
-- **Queue controls** — shuffle, insert-next, smart dedup, and queue optimization
-- **Resume state** — picks up right where you left off
-
-### 🔍 Discovery & Search
-- **Fast search** with rich metadata (artist, album, duration, thumbnails)
-- **Trending charts** and personalized suggestions
-- **Made For You** sections and Daily Mixes
-- **Radio stations** — curated genre stations for quick listening (Bollywood, Pop, Lo-Fi, Hip Hop, EDM, and more)
-
-### 📚 Library & Organization
-- **Favorites** — heart songs to save them
-- **Playlists** — create, edit, and manage custom playlists
-- **Recently Played** and **Most Played** views
-- **Offline downloads** — save songs and listen without internet
-
-### 🎤 Lyrics & Visuals
-- **Synced lyrics** from LRCLIB with auto-follow mode
-- **Animated album art** backgrounds on the Now Playing screen
-- **Theme switching** — light and dark mode
-
-### 🧬 Music DNA *(Only on Null)*
-- **DNA Helix** — animated visualization of your unique listening profile
-- **Genre, mood, tempo & decade analysis** — deep insights into your taste
-- **Acousticness profiling** — how organic vs electronic your taste is
-- **Sonic Twins** — discover artists that match your DNA
-- **Shareable DNA cards** — post your music identity on socials
-
-### 👤 Account & Sync
-- **Account login/signup** with session persistence
-- **Cloud sync** — favorites, playlists, and history sync across devices
-- **Feedback & issue reporting** built into the app
-
----
-
-## 🏗️ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 18 + Vite |
-| **Android Shell** | Capacitor 6 |
-| **Backend API** | Node.js + Express |
-| **Stream Resolution** | yt-dlp (primary) → Piped → Invidious (fallback) |
-| **Lyrics** | LRCLIB API |
-| **Auth** | JWT + session persistence |
-| **Styling** | CSS3 with dark/light theme tokens |
-
----
-
-## 📂 Repository Layout
-
-```
-null/
-├── src/                    # React app and player state management
-│   ├── components/         # UI components (Player, Queue, Library, etc.)
-│   ├── pages/              # Route pages
-│   └── hooks/              # Custom React hooks
-├── android/                # Capacitor Android shell and native modules
-├── backend/                # Node.js API server
-│   ├── providers/          # Music source providers
-│   ├── resolvers/          # Stream URL resolvers
-│   ├── auth/               # JWT authentication
-│   └── cache/              # Response caching layer
-├── website/                # Marketing website (static HTML/CSS/JS)
-├── shared/                 # Shared utilities
-├── tests/                  # Unit and integration tests
-├── server.mjs              # API server entry point
-└── screenshots/            # App screenshots
-```
-
----
-
-## 🛠️ Local Development
+## Local Development
 
 ### Prerequisites
 
 - Node.js 22+
 - npm 10+
-- Java 21 (for Android builds)
-- Android SDK (for device builds)
-
-### Quick Start
-
-```bash
-# Clone the repo
-git clone https://github.com/adit-ya15/music-player.git
-cd music-player
-
-# Install dependencies
-npm install
-
-# Start the backend server
-npm run server
-
-# Start the dev server (in a new terminal)
-=======
-### Prerequisites
-
-- Node.js 22+
-- npm 10+
-- Java 21 (for Android builds)
-- Android SDK (for device builds)
+- Java 21 for Android builds
+- Android SDK for device builds
 
 ### Install and Run
 
-```powershell
+```bash
+git clone https://github.com/adit-ya15/music-player.git
+cd music-player
 npm install
 npm run server
->>>>>>> 4da57c6f308f7540c06359908bba62fe352508c9
 npm run dev
 ```
 
 ### Verify
 
-<<<<<<< HEAD
 ```bash
-npm run lint          # Code linting
-npm test              # Run tests
-npm run build         # Production build
+npm run lint
+npm test
+npm run build
 ```
 
 ---
 
-## 📦 Android Build
+## Android Build
 
 ### Debug APK
 
@@ -275,25 +172,16 @@ npm run build         # Production build
 npm run build
 npx cap sync android
 cd android
-./gradlew assembleDebug    # or .\gradlew.bat assembleDebug on Windows
+./gradlew assembleDebug
 ```
 
-Output: `android/app/build/outputs/apk/debug/app-debug.apk`
-=======
-```powershell
-npm run lint
-npm test
-npm run build
-```
+Output:
 
-## Android Build
-
-### Debug APK
->>>>>>> 4da57c6f308f7540c06359908bba62fe352508c9
+- `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ### Release APK
 
-> See [RELEASE_AND_UPDATE_GUIDE.md](./RELEASE_AND_UPDATE_GUIDE.md) for full signing and release instructions.
+See the full guide in [RELEASE_AND_UPDATE_GUIDE.md](./RELEASE_AND_UPDATE_GUIDE.md).
 
 ```bash
 npm run build
@@ -302,13 +190,12 @@ cd android
 ./gradlew assembleRelease
 ```
 
-<<<<<<< HEAD
 ---
 
-## 📖 Documentation
+## Documentation
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture and data flow |
 | [SECURITY.md](./SECURITY.md) | Security practices and threat model |
 | [PRIVACY.md](./PRIVACY.md) | Privacy policy and data handling |
@@ -321,109 +208,47 @@ cd android
 
 ---
 
-## 🌐 Marketing Website
-
-The website source lives in `website/` and is deployed to [null-music.netlify.app](https://null-music.netlify.app).
-
-Features:
-- Apple-inspired interactive design with mouse-reactive particles
-- Animated listening experience section with in-place expand/collapse
-- Music DNA showcase section
-- App screenshot carousel (12 screens)
-- UPI support section with QR code
-- Full SEO (Open Graph, Twitter Cards, JSON-LD structured data)
-
----
-
-## ⚙️ Environment Variables
-
-Copy the example files to get started:
-
-```bash
-cp .env.example .env
-cp .env.production.example .env.production
-```
-=======
-Output:
-
-- android/app/build/outputs/apk/debug/app-debug.apk
-
-### Release Build
-
-Read full guide first:
-
-- [RELEASE_AND_UPDATE_GUIDE.md](./RELEASE_AND_UPDATE_GUIDE.md)
-
-## Release and Update Docs
-
-- [RELEASE_AND_UPDATE_GUIDE.md](./RELEASE_AND_UPDATE_GUIDE.md)
-- [OPEN_SOURCE_RELEASE_CHECKLIST.md](./OPEN_SOURCE_RELEASE_CHECKLIST.md)
-- [CHANGELOG.md](./CHANGELOG.md)
-
-## Architecture and Security
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [SECURITY.md](./SECURITY.md)
-- [PRIVACY.md](./PRIVACY.md)
-
-## Open Source Project Docs
-
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-- [ROADMAP.md](./ROADMAP.md)
-
-## Public Showcase Website
-
-- Source files: [public/showcase/index.html](./public/showcase/index.html)
-- Local URL: http://localhost:5173/showcase/index.html
-
 ## Environment
 
-Use:
+Use `.env.example` for local setup and `.env.production.example` for production defaults.
 
-- .env.example for local setup
-- .env.production.example for production defaults
+Never commit:
 
-Keep secrets out of git. Never commit:
-
-- .env values
+- `.env` values
 - cookies files
-- android keystore credentials
-- android/keystore.properties
->>>>>>> 4da57c6f308f7540c06359908bba62fe352508c9
-
-> **⚠️ Never commit:** `.env` files, cookies, Android keystore credentials, or `android/keystore.properties`
+- Android keystore credentials
+- `android/keystore.properties`
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a PR.
+Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request.
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes (`git commit -m 'Add my feature'`)
-4. Push to the branch (`git push origin feature/my-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Commit your changes
+4. Push your branch
+5. Open a pull request
 
 ---
 
-## ❤️ Support
+## Support
 
-Null is free and open-source. If you enjoy it, consider supporting development:
+Null is free and open-source. If you enjoy it, consider supporting development.
 
-- **UPI:** `aditya262701@okicici`
-- **Website:** [null-music.netlify.app/#support](https://null-music.netlify.app/#support)
-- **Star this repo** ⭐ — it helps more than you think!
+- UPI: `aditya262701@okicici`
+- Website: [null-music.netlify.app/#support](https://null-music.netlify.app/#support)
+- Star the repository
 
 ---
 
-## 📄 License
+## License
 
-MIT — see [LICENSE](./LICENSE) for details.
+MIT. See [LICENSE](./LICENSE).
 
 ---
 
 <p align="center">
-  Made with ❤ by <a href="https://github.com/adit-ya15">Aditya</a>
+  Made with love by <a href="https://github.com/adit-ya15">Aditya</a>
 </p>

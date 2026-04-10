@@ -152,7 +152,11 @@ export function DNAProfile() {
   if (loading) {
     return (
       <div className="dna-profile loading">
-        <div className="spinner">Analyzing your music...</div>
+        <div className="dna-loading-panel">
+          <div className="dna-scanline" />
+          <div className="spinner">Analyzing your music fingerprint...</div>
+          <p>Reading rhythm, mood, and the trail of tracks you keep coming back to.</p>
+        </div>
       </div>
     );
   }
@@ -160,8 +164,10 @@ export function DNAProfile() {
   if (error) {
     return (
       <div className="dna-profile error">
-        <div className="offline-banner">{isOffline ? 'Offline mode' : 'Music DNA notice'}</div>
-        <div className="error-message">{error}</div>
+        <div className="dna-state-panel">
+          <div className="offline-banner">{isOffline ? 'Offline mode' : 'Music DNA notice'}</div>
+          <div className="error-message">{error}</div>
+        </div>
         <div className="dna-actions-row">
           <button onClick={fetchDNA} className="retry-btn">
           Retry
@@ -179,44 +185,75 @@ export function DNAProfile() {
   if (!dna) {
     return (
       <div className="dna-profile empty">
-        <p>No DNA data available. Start playing tracks to build your profile.</p>
+        <div className="dna-state-panel">
+          <p>No DNA data available yet. Play a few tracks to build your profile.</p>
+        </div>
       </div>
     );
   }
 
+  const dnaSignals = [
+    { label: 'Tracks analyzed', value: String(dna.trackCount || 0), tone: 'aqua' },
+    { label: 'Favorite tempo', value: `${dna.tempoAverage || 120} BPM`, tone: 'gold' },
+    { label: 'Mood level', value: `${Math.round((dna.valenceAverage || 0.5) * 100)}%`, tone: 'rose' },
+    { label: 'Energy level', value: `${Math.round((dna.energyAverage || 0.5) * 100)}%`, tone: 'violet' },
+  ];
+
   return (
     <div className="dna-profile">
-      <div className="dna-header">
-        <h1>🧬 Your Music DNA</h1>
-        <p className="dna-subtitle">Your unique musical fingerprint based on {dna.trackCount || 0} tracks</p>
-        <div className="dna-badges">
-          <span className="track-status-pill track-status-pill--downloaded">Offline-first</span>
-          <span className="track-status-pill">Cache-aware</span>
+      <div className="dna-shell">
+        <section className="dna-hero">
+          <div className="dna-hero-copy">
+            <div className="dna-eyebrow">Music DNA / signal feed</div>
+            <h1>Your listening pattern, rendered like an industrial readout.</h1>
+            <p className="dna-subtitle">
+              Built from {dna.trackCount || 0} tracks. This view shows the shape of your taste, not just a list of stats.
+            </p>
+            <div className="dna-badges">
+              <span className="track-status-pill track-status-pill--downloaded">Offline-first</span>
+              <span className="track-status-pill">Cache-aware</span>
+              <span className="track-status-pill">Forge mode</span>
+            </div>
+          </div>
+
+          <div className="dna-hero-card">
+            <div className="dna-hero-card-label">Current profile</div>
+            <div className="dna-hero-card-value">{getMusicSignature(dna)}</div>
+            <div className="dna-hero-card-meta">
+              <span>{Math.round((dna.energyAverage || 0.5) * 100)}% energy</span>
+              <span>{Math.round((dna.valenceAverage || 0.5) * 100)}% mood</span>
+              <span>{Math.round((dna.danceabilityAverage || 0.5) * 100)}% groove</span>
+            </div>
+          </div>
+        </section>
+
+        <div className="dna-header dna-header--controls">
+          <button onClick={handleRefreshDNA} className="refresh-btn" type="button">
+            Re-scan DNA
+          </button>
+          <p className="dna-header-note">Re-scans recent plays and rebuilds the sonic profile from the ground up.</p>
         </div>
-        <button onClick={handleRefreshDNA} className="refresh-btn">
-          ↻ Refresh
-        </button>
+
+        <div className="dna-signal-grid">
+          {dnaSignals.map((signal) => (
+            <div key={signal.label} className={`dna-signal dna-signal--${signal.tone}`}>
+              <span className="dna-signal-label">{signal.label}</span>
+              <strong className="dna-signal-value">{signal.value}</strong>
+            </div>
+          ))}
+        </div>
       </div>
 
       <UserDNACard dna={dna} />
 
-      <div className="dna-tabs">
-        <button
-          className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
-        >
+      <div className="dna-tabs" role="tablist" aria-label="Music DNA sections">
+        <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')} type="button">
           Overview
         </button>
-        <button
-          className={`tab-btn ${activeTab === 'genres' ? 'active' : ''}`}
-          onClick={() => setActiveTab('genres')}
-        >
-          Genres
+        <button className={`tab-btn ${activeTab === 'genres' ? 'active' : ''}`} onClick={() => setActiveTab('genres')} type="button">
+          Genre grid
         </button>
-        <button
-          className={`tab-btn ${activeTab === 'twins' ? 'active' : ''}`}
-          onClick={() => setActiveTab('twins')}
-        >
+        <button className={`tab-btn ${activeTab === 'twins' ? 'active' : ''}`} onClick={() => setActiveTab('twins')} type="button">
           Sonic Twins
         </button>
       </div>
@@ -224,10 +261,11 @@ export function DNAProfile() {
       {activeTab === 'overview' && (
         <div className="dna-section overview">
           <div className="dna-helix-container">
+            <div className="dna-panel-title">Helix scan</div>
             <DNAHelix dna={dna} />
           </div>
 
-          <div className="dna-stats">
+          <div className="dna-stats dna-stats--stacked">
             <div className="stat">
               <label>Energy Level</label>
               <div className="stat-bar">
@@ -236,7 +274,10 @@ export function DNAProfile() {
                   style={{ width: `${(dna.energyAverage || 0.5) * 100}%` }}
                 />
               </div>
-              <span>{Math.round((dna.energyAverage || 0.5) * 100)}%</span>
+              <div className="stat-footer">
+                <span>{Math.round((dna.energyAverage || 0.5) * 100)}%</span>
+                <small>How often your tracks hit with force.</small>
+              </div>
             </div>
 
             <div className="stat">
@@ -247,7 +288,10 @@ export function DNAProfile() {
                   style={{ width: `${(dna.valenceAverage || 0.5) * 100}%` }}
                 />
               </div>
-              <span>{Math.round((dna.valenceAverage || 0.5) * 100)}%</span>
+              <div className="stat-footer">
+                <span>{Math.round((dna.valenceAverage || 0.5) * 100)}%</span>
+                <small>Positive versus moody balance.</small>
+              </div>
             </div>
 
             <div className="stat">
@@ -258,7 +302,10 @@ export function DNAProfile() {
                   style={{ width: `${(dna.danceabilityAverage || 0.5) * 100}%` }}
                 />
               </div>
-              <span>{Math.round((dna.danceabilityAverage || 0.5) * 100)}%</span>
+              <div className="stat-footer">
+                <span>{Math.round((dna.danceabilityAverage || 0.5) * 100)}%</span>
+                <small>How easily your library moves.</small>
+              </div>
             </div>
 
             <div className="stat">
@@ -269,12 +316,15 @@ export function DNAProfile() {
                   style={{ width: `${(dna.acousticnessAverage || 0.3) * 100}%` }}
                 />
               </div>
-              <span>{Math.round((dna.acousticnessAverage || 0.3) * 100)}%</span>
+              <div className="stat-footer">
+                <span>{Math.round((dna.acousticnessAverage || 0.3) * 100)}%</span>
+                <small>Organic versus synthetic texture.</small>
+              </div>
             </div>
 
             <div className="stat">
               <label>Average Tempo</label>
-              <div className="stat-value">{dna.tempoAverage || 120} BPM</div>
+              <div className="stat-value stat-value--tempo">{dna.tempoAverage || 120} BPM</div>
             </div>
           </div>
         </div>
@@ -294,9 +344,21 @@ export function DNAProfile() {
 
       <div className="dna-footer">
         <p className="calculated-at">
-          Calculated: {new Date(dna.calculatedAt).toLocaleDateString()}
+          Last scan: {new Date(dna.calculatedAt).toLocaleString()}
         </p>
       </div>
     </div>
   );
+}
+
+function getMusicSignature(dna) {
+  const energy = dna.energyAverage || 0.5;
+  const valence = dna.valenceAverage || 0.5;
+  const dance = dna.danceabilityAverage || 0.5;
+
+  if (energy > 0.72 && valence > 0.62 && dance > 0.65) return 'High-voltage spark';
+  if (energy < 0.34 && valence < 0.45) return 'Night-drive low light';
+  if (dance > 0.74) return 'Rhythm-forward pulse';
+  if (dna.acousticnessAverage > 0.58) return 'Warm acoustic body';
+  return 'Balanced spectrum';
 }

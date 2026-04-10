@@ -36,6 +36,7 @@ import { logger } from "./backend/lib/logger.mjs";
 import { metrics } from "./backend/lib/metrics.mjs";
 import { scheduleYtdlpAutoUpdate } from "./backend/lib/ytdlpAutoUpdate.mjs";
 import { getRecommendations, trackUserAction } from "./backend/reco/recommendations.mjs";
+import { recordTrackPlay } from "./backend/reco/trackPlayLogger.mjs";
 import { calculateUserDNA, getUserDNA, findSonicTwins, invalidateUserDNA } from "./backend/reco/musicDna.mjs";
 import { initializeMusicDNASchema } from "./backend/db/musicDnaSchema.mjs";
 import { pool } from "./backend/db/postgres.mjs";
@@ -448,6 +449,57 @@ app.post("/api/track", requireRecoApiKey, async (req, res) => {
     } catch (err) {
         logger.warn("reco", "track endpoint failed", { error: err?.message });
         res.status(500).json({ error: "Internal error" });
+    }
+});
+
+app.post("/api/track/play", requireAuth, async (req, res) => {
+    try {
+        const userId = req.auth?.user?.id;
+        if (!userId) {
+            return res.status(401).json({ ok: false, error: "Unauthorized" });
+        }
+
+        const payloadTrack = req.body?.track && typeof req.body.track === "object" ? req.body.track : null;
+        const trackId = String(payloadTrack?.id || "").trim();
+        if (!trackId) {
+            return res.status(400).json({ ok: false, error: "track.id is required" });
+        }
+
+        const completionRaw = Number(req.body?.completionRatio);
+        const completionRatio = Number.isFinite(completionRaw)
+            ? Math.max(0, Math.min(1, completionRaw))
+            : 0;
+
+        const features = req.body?.features && typeof req.body.features === "object"
+            ? req.body.features
+            : (payloadTrack?.features && typeof payloadTrack.features === "object" ? payloadTrack.features : null);
+
+        await recordTrackPlay(
+            userId,
+            {
+                id: trackId,
+                title: String(payloadTrack?.title || "").trim() || "Unknown",
+                artist: String(payloadTrack?.artist || "").trim() || "Unknown",
+                features,
+            },
+            completionRatio,
+            features
+        );
+
+        // Ensure next DNA/Twins fetch reflects newly recorded behavior.
+        await invalidateUserDNA(userId);
+
+        return res.json({ ok: true });
+    } catch (error) {
+        logger.warn("reco", "track play log failed", {
+            error: error?.message,
+            userId: req.auth?.user?.id,
+        });
+
+        return res.status(500).json({
+            ok: false,
+            error: "Could not record track play right now.",
+        });
     }
 });
 

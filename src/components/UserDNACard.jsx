@@ -38,10 +38,16 @@ export function UserDNACard({ dna }) {
     <div className="dna-card-container">
       <div className="dna-card">
         <div className="card-header">
-          <h2>🧬 My Music DNA</h2>
+          <div className="dna-eyebrow">Signal card</div>
+          <h2>My Music DNA</h2>
         </div>
 
         <div className="card-content">
+          <div className="card-stat card-stat--wide">
+            <span className="stat-label">Signal summary</span>
+            <span className="stat-value">{vibe}</span>
+          </div>
+
           <div className="card-stat">
             <span className="stat-label">Primary Genres</span>
             <span className="stat-value">{topGenres}</span>
@@ -82,16 +88,16 @@ export function UserDNACard({ dna }) {
 
         <div className="card-footer">
           <p>Generated on {new Date(dna.calculatedAt).toLocaleDateString()}</p>
-          <p className="app-mention">Powered by Null Music</p>
+          <p className="app-mention">Null signal print</p>
         </div>
       </div>
 
       <div className="card-actions">
         <button onClick={handleShare} className="share-btn">
-          📤 Share
+          Share signal
         </button>
         <button onClick={handleDownload} className="download-btn">
-          ⬇️ Download
+          Export JSON
         </button>
       </div>
     </div>

@@ -126,7 +126,10 @@ export function SonicTwins() {
   if (loading) {
     return (
       <div className="sonic-twins loading">
-        <div className="spinner">Finding your sonic twins...</div>
+        <div className="dna-state-panel">
+          <div className="spinner">Scanning the catalog for matching artists...</div>
+          <p>Looking for artists whose shapes line up with your listening pattern.</p>
+        </div>
       </div>
     );
   }
@@ -134,8 +137,10 @@ export function SonicTwins() {
   if (error) {
     return (
       <div className="sonic-twins error">
-        <div className="offline-banner">{isOffline ? 'Offline mode' : 'Music DNA notice'}</div>
-        <p>{error}</p>
+        <div className="dna-state-panel">
+          <div className="offline-banner">{isOffline ? 'Offline mode' : 'Music DNA notice'}</div>
+          <p>{error}</p>
+        </div>
         <button onClick={fetchSonicTwins} className="retry-btn" type="button">Retry</button>
       </div>
     );
@@ -151,10 +156,16 @@ export function SonicTwins() {
 
   return (
     <div className="sonic-twins">
-      <h3>🌟 Your Sonic Twins</h3>
-      <p className="subtitle">
-        Artists who share your musical DNA – discover your next favorite artist
-      </p>
+      <div className="sonic-twins-header">
+        <div>
+          <div className="dna-eyebrow">Twin scanner</div>
+          <h3>Your Sonic Twins</h3>
+          <p className="subtitle">
+            Artists that mirror your taste profile without sounding like copy-paste recommendations.
+          </p>
+        </div>
+        <div className="sonic-twins-count">{twins.length} matches</div>
+      </div>
 
       <div className="twins-grid">
         {twins.map((twin, idx) => (
@@ -169,8 +180,8 @@ export function SonicTwins() {
               <p className="reason">{twin.reason || 'Musical match'}</p>
             </div>
             <div className="twin-actions">
-              <button className="search-btn" onClick={() => handleSearchArtist(twin.artist)}>
-                🔍 Find
+              <button className="search-btn" onClick={() => handleSearchArtist(twin.artist)} type="button">
+                Find artist
               </button>
             </div>
           </div>
@@ -178,11 +189,10 @@ export function SonicTwins() {
       </div>
 
       <div className="twins-info">
-        <h4>What are Sonic Twins?</h4>
+        <h4>Signal logic</h4>
         <p>
-          Based on your music DNA (energy, mood, genres, and artist preferences),
-          these are artists you've never heard of but would likely love. Each match
-          is calculated using advanced similarity algorithms.
+          Sonic Twins compares your energy, mood, genre shape, and artist patterns against the catalog,
+          then keeps the strongest non-obvious matches.
         </p>
       </div>
     </div>

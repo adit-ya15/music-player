@@ -1,753 +1,937 @@
 /* ═══════════════════════════════════════════════════════
    Music DNA Profile Styles
+   New direction: scan-room / editorial / high-contrast layout
    ═══════════════════════════════════════════════════════ */
 
+:root {
+  --dna-bg: #03050a;
+  --dna-surface: rgba(12, 11, 13, 0.94);
+  --dna-surface-2: rgba(20, 16, 19, 0.98);
+  --dna-surface-3: rgba(255, 255, 255, 0.03);
+  --dna-line: rgba(250, 58, 71, 0.2);
+  --dna-line-strong: rgba(255, 102, 0, 0.24);
+  --dna-text: #f4f8ff;
+  --dna-text-muted: rgba(244, 248, 255, 0.7);
+  --dna-text-soft: rgba(244, 248, 255, 0.46);
+  --dna-aqua: #ff5a64;
+  --dna-gold: #ff9e45;
+  --dna-rose: #fa3a47;
+  --dna-violet: #ff7647;
+  --dna-shadow: 0 34px 100px rgba(0, 0, 0, 0.55);
+  --dna-radius-xl: 28px;
+  --dna-radius-lg: 20px;
+  --dna-radius-md: 14px;
+  --dna-radius-sm: 10px;
+}
+
 .dna-profile {
-  padding: 2rem;
+  position: relative;
   max-width: 1200px;
   margin: 0 auto;
+  padding: 24px;
+  color: var(--dna-text);
   background:
-    radial-gradient(circle at top, rgba(74, 222, 128, 0.14), transparent 30%),
-    radial-gradient(circle at right, rgba(56, 189, 248, 0.14), transparent 24%),
-    linear-gradient(180deg, #0a1020 0%, #11172a 100%);
-  border-radius: 16px;
-  color: #edf7ff;
+    radial-gradient(circle at top left, rgba(250, 58, 71, 0.2), transparent 24%),
+    radial-gradient(circle at top right, rgba(255, 118, 71, 0.17), transparent 22%),
+    radial-gradient(circle at 50% 18%, rgba(255, 158, 69, 0.12), transparent 28%),
+    linear-gradient(180deg, #050404 0%, #140b0c 52%, #060405 100%);
+  border: 1px solid rgba(250, 58, 71, 0.18);
+  border-radius: var(--dna-radius-xl);
+  box-shadow: var(--dna-shadow);
+  overflow: hidden;
 }
 
-.dna-profile.loading,
-.dna-profile.error,
-.dna-profile.empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
+.dna-profile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(250, 58, 71, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 158, 69, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.42;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 92%);
 }
 
-.dna-profile .spinner {
-  font-size: 1.2rem;
-  color: #6ee7d8;
-  animation: pulse 1.5s ease-in-out infinite;
-  text-align: center;
+.dna-profile > * {
+  position: relative;
+  z-index: 1;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+.dna-profile::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 120px;
+  background: linear-gradient(180deg, transparent, rgba(250, 58, 71, 0.06));
+  pointer-events: none;
 }
 
-.dna-profile .error-message {
-  color: #ff8f9b;
-  margin-bottom: 1rem;
-  text-align: center;
-  line-height: 1.4;
+.dna-shell {
+  display: grid;
+  gap: 18px;
 }
 
-.offline-banner {
+.dna-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.dna-hero-copy,
+.dna-hero-card,
+.dna-card,
+.genre-breakdown,
+.sonic-twins,
+.twins-info,
+.dna-state-panel,
+.dna-loading-panel {
+  background:
+    linear-gradient(180deg, rgba(12, 11, 13, 0.95) 0%, rgba(20, 16, 19, 0.99) 100%),
+    radial-gradient(circle at top left, rgba(250, 58, 71, 0.08), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(255, 158, 69, 0.07), transparent 34%);
+  border: 1px solid rgba(250, 58, 71, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.dna-hero-copy {
+  padding: 26px;
+  overflow: hidden;
+  position: relative;
+}
+
+.dna-hero-copy::after {
+  content: '';
+  position: absolute;
+  inset: auto -20% -35% auto;
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, rgba(250, 58, 71, 0.18), transparent 66%);
+  pointer-events: none;
+}
+
+.dna-eyebrow {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 0.75rem;
-  padding: 0.35rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(110, 231, 216, 0.12);
-  color: #8be9d7;
-  border: 1px solid rgba(110, 231, 216, 0.26);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #ff7a82;
   text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.dna-hero h1,
+.dna-header h1 {
+  margin: 0;
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.dna-hero h1 {
+  font-size: clamp(2.3rem, 4vw, 4.5rem);
+  max-width: 12ch;
+}
+
+.dna-subtitle {
+  margin: 14px 0 0;
+  max-width: 60ch;
+  color: var(--dna-text-muted);
+  font-size: 1rem;
+  line-height: 1.65;
 }
 
 .dna-badges {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 0.8rem;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.track-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dna-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.track-status-pill--downloaded {
+  border-color: rgba(117, 242, 224, 0.28);
+  background: rgba(117, 242, 224, 0.1);
+  color: #b6fff4;
+}
+
+.dna-hero-card {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dna-hero-card::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: calc(var(--dna-radius-lg) - 6px);
+  border: 1px solid rgba(255, 158, 69, 0.18);
+  pointer-events: none;
+}
+
+.dna-hero-card-label,
+.dna-panel-title,
+.sonic-twins-count {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+}
+
+.dna-hero-card-label,
+.dna-panel-title {
+  background: rgba(250, 58, 71, 0.12);
+  color: #ff8e95;
+  border: 1px solid rgba(250, 58, 71, 0.25);
+}
+
+.dna-hero-card-value {
+  font-size: clamp(1.65rem, 2.8vw, 2.45rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  max-width: 10ch;
+}
+
+.dna-hero-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--dna-text-muted);
+  font-size: 0.82rem;
+}
+
+.dna-hero-card-meta span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.dna-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.dna-header--controls {
+  padding: 2px 2px 0;
+}
+
+.dna-header-note {
+  margin: 0;
+  color: var(--dna-text-soft);
+  font-size: 0.92rem;
+}
+
+.refresh-btn,
+.retry-btn,
+.search-btn,
+.share-btn,
+.download-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.refresh-btn:hover,
+.retry-btn:hover,
+.search-btn:hover,
+.share-btn:hover,
+.download-btn:hover {
+  transform: translateY(-1px);
+}
+
+.refresh-btn,
+.retry-btn,
+.search-btn,
+.share-btn {
+  background: linear-gradient(135deg, rgba(250, 58, 71, 0.95), rgba(255, 118, 71, 0.92));
+  color: #130607;
+  box-shadow: 0 12px 30px rgba(250, 58, 71, 0.26);
+}
+
+.retry-btn--ghost,
+.download-btn {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--dna-text);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: none;
+}
+
+.download-btn {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dna-state-panel,
+.dna-loading-panel {
+  padding: 24px;
+}
+
+.dna-loading-panel {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+}
+
+.dna-scanline {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(250, 58, 71, 0.14) 50%, transparent 100%);
+  animation: dna-scan 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes dna-scan {
+  0% { transform: translateY(-40%); opacity: 0.25; }
+  50% { opacity: 0.8; }
+  100% { transform: translateY(40%); opacity: 0.25; }
+}
+
+.dna-loading-panel .spinner,
+.sonic-twins.loading .spinner {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ff8a91;
+}
+
+.dna-loading-panel p,
+.sonic-twins.loading p,
+.dna-state-panel p {
+  margin: 0;
+  color: var(--dna-text-muted);
+  line-height: 1.6;
+}
+
+.dna-profile.loading,
+.dna-profile.error,
+.dna-profile.empty,
+.sonic-twins.loading,
+.sonic-twins.error,
+.sonic-twins.empty {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
 }
 
 .dna-actions-row {
   display: flex;
-  gap: 0.75rem;
   flex-wrap: wrap;
-  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
 }
 
-.dna-profile .retry-btn {
-  padding: 0.5rem 1.5rem;
-  background: linear-gradient(135deg, #56d8ff 0%, #6ee7d8 100%);
-  color: #07111f;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.3s ease;
-}
-
-.dna-profile .retry-btn:hover {
-  transform: translateY(-1px);
-}
-
-.retry-btn--ghost {
-  background: transparent !important;
-  color: #8be9d7 !important;
-  border: 1px solid rgba(139, 233, 215, 0.4) !important;
-}
-
-/* Header */
-.dna-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.dna-header h1 {
-  font-size: 2.5rem;
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #8be9d7 0%, #7dd3fc 55%, #f9a8d4 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.dna-subtitle {
-  color: rgba(237, 247, 255, 0.72);
-  font-size: 0.95rem;
-  margin: 0;
-}
-
-.refresh-btn {
-  margin-top: 1rem;
-  padding: 0.6rem 1.5rem;
-  background: rgba(110, 231, 216, 0.12);
-  color: #8be9d7;
-  border: 1px solid rgba(139, 233, 215, 0.45);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 600;
-}
-
-.refresh-btn:hover {
-  background: rgba(110, 231, 216, 0.2);
-  transform: scale(1.05);
-}
-
-/* DNA Card */
-.dna-card-container {
-  background: rgba(255, 255, 255, 0.04);
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid rgba(139, 233, 215, 0.18);
-  margin-bottom: 2rem;
-}
-
-.dna-card {
-  background: linear-gradient(135deg, rgba(10, 20, 40, 0.94), rgba(20, 30, 55, 0.94));
-  border-radius: 12px;
-  padding: 1.5rem;
-  border: 1px solid rgba(139, 233, 215, 0.22);
-}
-
-.card-header {
-  border-bottom: 1px solid rgba(139, 233, 215, 0.24);
-  padding-bottom: 1rem;
-  margin-bottom: 1rem;
-}
-
-.card-header h2 {
-  margin: 0;
-  color: #8be9d7;
-}
-
-.card-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.card-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: rgba(237, 247, 255, 0.65);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.stat-value {
-  font-size: 1.3rem;
-  color: #edf7ff;
-  font-weight: bold;
-  word-break: break-word;
-}
-
-.vibe-text {
-  font-size: 1.1rem;
-  color: #f9a8d4;
-}
-
-.mini-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 0.3rem 0;
-}
-
-.mini-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #56d8ff, #6ee7d8);
-}
-
-.mini-fill.mood {
-  background: linear-gradient(90deg, #f9a8d4, #fb7185);
-}
-
-.card-footer {
-  text-align: center;
-  color: rgba(237, 247, 255, 0.5);
-  font-size: 0.85rem;
-  border-top: 1px solid rgba(139, 233, 215, 0.16);
-  padding-top: 1rem;
-}
-
-.app-mention {
-  font-weight: bold;
-  color: #8be9d7;
-  margin-top: 0.5rem;
-}
-
-.card-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-top: 1rem;
-}
-
-.share-btn,
-.download-btn {
-  padding: 0.7rem 1.5rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.share-btn {
-  background: linear-gradient(135deg, #6ee7d8 0%, #56d8ff 100%);
-  color: #07111f;
-}
-
-.share-btn:hover {
-  transform: translateY(-2px);
-}
-
-.download-btn {
-  background: rgba(249, 168, 212, 0.12);
-  color: #f9a8d4;
-  border: 1px solid rgba(249, 168, 212, 0.4);
-}
-
-.download-btn:hover {
-  transform: translateY(-2px);
-}
-
-/* Tabs */
 .dna-tabs {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  border-bottom: 1px solid rgba(139, 233, 215, 0.16);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin: 8px 0 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(250, 58, 71, 0.18);
 }
 
 .tab-btn {
-  padding: 1rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 11px 16px;
   background: transparent;
-  color: rgba(237, 247, 255, 0.6);
-  border: none;
-  border-bottom: 3px solid transparent;
+  color: var(--dna-text-muted);
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  min-width: 0;
+  font: inherit;
+  font-weight: 800;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 
 .tab-btn:hover {
-  color: #edf7ff;
+  color: var(--dna-text);
+  transform: translateY(-1px);
 }
 
 .tab-btn.active {
-  color: #8be9d7;
-  border-bottom-color: #8be9d7;
+  color: var(--dna-text);
+  background: linear-gradient(135deg, rgba(250, 58, 71, 0.2), rgba(255, 158, 69, 0.14));
+  border-color: rgba(250, 58, 71, 0.24);
 }
 
-/* Overview Section */
 .dna-section {
-  animation: fadeIn 0.3s ease;
+  animation: dna-fade 220ms ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes dna-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .overview {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
 }
 
-@media (max-width: 768px) {
-  .overview {
-    grid-template-columns: 1fr;
-  }
+.dna-helix-container,
+.genre-breakdown,
+.sonic-twins,
+.dna-card-container,
+.twins-info {
+  border-radius: var(--dna-radius-lg);
 }
 
 .dna-helix-container {
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.012)),
+    radial-gradient(circle at top, rgba(250, 58, 71, 0.1), transparent 42%);
+  border: 1px solid rgba(250, 58, 71, 0.2);
+  min-height: 540px;
   display: flex;
+  flex-direction: column;
   justify-content: center;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.025);
-  border-radius: 12px;
-  padding: 1rem;
-  border: 1px solid rgba(139, 233, 215, 0.12);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.dna-panel-title {
+  margin-bottom: 4px;
 }
 
 .dna-helix {
   width: 100%;
-  max-width: 300px;
 }
 
 .helix-svg {
   width: 100%;
   height: auto;
-  filter: drop-shadow(0 0 20px rgba(110, 231, 216, 0.22));
+  filter: drop-shadow(0 0 24px rgba(250, 58, 71, 0.24)) drop-shadow(0 0 36px rgba(255, 158, 69, 0.1));
 }
 
-/* Stats */
 .dna-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  display: grid;
+  gap: 14px;
+}
+
+.dna-stats--stacked .stat {
+  padding: 18px;
+  border-radius: var(--dna-radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(250, 58, 71, 0.14);
 }
 
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 10px;
 }
 
-.stat label {
-  font-size: 0.9rem;
-  color: rgba(237, 247, 255, 0.68);
+.stat label,
+.stat-label {
+  color: var(--dna-text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.stat-bar,
+.mini-bar,
+.genre-bar {
+  overflow: hidden;
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .stat-bar {
   height: 12px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  overflow: hidden;
+  border-radius: 999px;
+}
+
+.stat-fill,
+.mini-fill,
+.decade-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 420ms ease;
 }
 
 .stat-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #56d8ff, #6ee7d8);
-  transition: width 0.5s ease;
+  background: linear-gradient(90deg, rgba(250, 58, 71, 0.98), rgba(255, 118, 71, 0.98));
 }
 
-.stat-fill.mood {
-  background: linear-gradient(90deg, #f9a8d4, #fb7185);
+.stat-fill.mood,
+.mini-fill.mood {
+  background: linear-gradient(90deg, rgba(255, 95, 95, 0.98), rgba(255, 158, 69, 0.94));
 }
 
 .stat-fill.dance {
-  background: linear-gradient(90deg, #8b5cf6, #c084fc);
+  background: linear-gradient(90deg, rgba(255, 118, 71, 0.98), rgba(250, 58, 71, 0.9));
 }
 
 .stat-fill.acoustic {
-  background: linear-gradient(90deg, #fbbf24, #fdba74);
+  background: linear-gradient(90deg, rgba(255, 158, 69, 0.96), rgba(250, 58, 71, 0.88));
 }
 
-.stat span {
-  font-size: 0.95rem;
-  color: #edf7ff;
-  font-weight: bold;
+.stat-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.stat-footer span,
+.stat span,
+.stat-value {
+  color: var(--dna-text);
+  font-weight: 800;
+}
+
+.stat-footer small {
+  color: var(--dna-text-soft);
+  font-size: 0.78rem;
 }
 
 .stat-value {
-  font-size: 1.2rem;
-  color: #8be9d7;
-  font-weight: bold;
+  font-size: 1.1rem;
 }
 
-/* Genre Breakdown */
-.genre-breakdown {
-  background: rgba(255, 255, 255, 0.025);
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid rgba(139, 233, 215, 0.12);
+.stat-value--tempo {
+  font-size: 1.85rem;
+  letter-spacing: -0.04em;
+}
+
+.dna-card-container {
+  display: grid;
+  gap: 12px;
+}
+
+.dna-card {
+  padding: 20px;
+}
+
+.card-header {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--dna-line);
+}
+
+.card-header h2,
+.sonic-twins h3,
+.twins-info h4,
+.top-artists h4,
+.decade-preferences h4,
+.artist-archetypes h4,
+.genre-breakdown h3 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.card-header h2 {
+  font-size: 1.55rem;
+}
+
+.card-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card-stat {
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--dna-radius-md);
+  background: rgba(255, 255, 255, 0.028);
+  border: 1px solid rgba(250, 58, 71, 0.12);
+  display: grid;
+  gap: 8px;
+}
+
+.card-stat--wide {
+  grid-column: 1 / -1;
+}
+
+.card-content .stat-value {
+  font-size: 1rem;
+  color: var(--dna-text);
+  word-break: break-word;
+}
+
+.vibe-text {
+  color: var(--dna-rose) !important;
+}
+
+.mini-bar {
+  height: 8px;
+  border-radius: 999px;
+}
+
+.mini-fill {
+  background: linear-gradient(90deg, rgba(117, 242, 224, 0.95), rgba(139, 140, 249, 0.92));
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dna-line);
+  color: var(--dna-text-soft);
+  font-size: 0.86rem;
+  flex-wrap: wrap;
+}
+
+.app-mention {
+  color: var(--dna-aqua);
+  font-weight: 800;
+}
+
+.card-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.share-btn,
+.download-btn {
+  flex: 1 1 180px;
+}
+
+.genre-breakdown,
+.sonic-twins,
+.twins-info {
+  padding: 20px;
+}
+
+.genre-breakdown.empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: var(--dna-text-soft);
 }
 
 .genre-breakdown h3 {
-  margin: 0 0 1.5rem 0;
-  color: #edf7ff;
+  font-size: 1.45rem;
+  margin-bottom: 14px;
 }
 
 .genre-chart {
-  margin-bottom: 2rem;
+  margin-bottom: 20px;
 }
 
 .bar-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  display: grid;
+  gap: 14px;
 }
 
 .genre-bar-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  display: grid;
+  gap: 8px;
 }
 
 .genre-bar {
-  flex: 1;
   height: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
-  overflow: hidden;
-  position: relative;
+  border-radius: 999px;
 }
 
 .genre-fill {
-  height: 100%;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-right: 0.5rem;
-  transition: width 0.5s ease;
-  position: relative;
+  padding: 0 10px;
+  color: #08111b;
+  font-weight: 900;
+  font-size: 0.72rem;
+  min-width: 32px;
 }
 
 .genre-fill.other {
-  background: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.55), rgba(148, 163, 184, 0.22));
 }
 
 .genre-label {
-  font-size: 0.75rem;
-  color: #fff;
-  font-weight: bold;
+  color: #08111b;
 }
 
 .genre-name {
-  min-width: 80px;
-  text-align: right;
+  color: var(--dna-text-muted);
   font-size: 0.9rem;
-  color: rgba(237, 247, 255, 0.72);
 }
 
-/* Top Artists */
-.top-artists {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(139, 233, 215, 0.12);
-}
-
-.top-artists h4 {
-  margin: 0 0 1rem 0;
-  color: #edf7ff;
+.top-artists,
+.decade-preferences,
+.artist-archetypes {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--dna-line);
 }
 
 .top-artists ul {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 12px 0 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
 }
 
 .top-artists li {
-  padding: 0.7rem;
-  background: rgba(110, 231, 216, 0.08);
-  border-radius: 6px;
-  border-left: 3px solid #8be9d7;
-  color: #edf7ff;
-  font-size: 0.9rem;
-}
-
-/* Decade Preferences */
-.decade-preferences {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(139, 233, 215, 0.12);
-}
-
-.decade-preferences h4 {
-  margin: 0 0 1rem 0;
-  color: #edf7ff;
+  padding: 12px 14px;
+  border-radius: var(--dna-radius-sm);
+  background: linear-gradient(135deg, rgba(250, 58, 71, 0.08), rgba(255, 158, 69, 0.06));
+  border: 1px solid rgba(250, 58, 71, 0.14);
+  color: var(--dna-text);
+  font-size: 0.92rem;
 }
 
 .timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
+  display: grid;
+  gap: 12px;
 }
 
 .decade {
   display: grid;
-  grid-template-columns: 50px 1fr 50px;
+  grid-template-columns: 54px minmax(0, 1fr) 48px;
   align-items: center;
-  gap: 1rem;
+  gap: 12px;
 }
 
-.decade label {
-  font-weight: bold;
-  color: rgba(237, 247, 255, 0.7);
-  text-align: center;
+.decade label,
+.percentage {
+  color: var(--dna-text-muted);
+  font-weight: 800;
 }
 
 .decade-bar {
   height: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 
 .decade-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #56d8ff, #6ee7d8);
-}
-
-.percentage {
-  font-size: 0.85rem;
-  color: rgba(237, 247, 255, 0.7);
-  text-align: center;
-}
-
-/* Artist Archetypes */
-.artist-archetypes {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(139, 233, 215, 0.12);
-}
-
-.artist-archetypes h4 {
-  margin: 0 0 1rem 0;
-  color: #edf7ff;
+  background: linear-gradient(90deg, rgba(250, 58, 71, 0.92), rgba(255, 158, 69, 0.92));
 }
 
 .archetypes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
+  gap: 12px;
 }
 
 .archetype-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem;
-  background: rgba(110, 231, 216, 0.08);
-  border-radius: 8px;
-  border: 1px solid rgba(139, 233, 215, 0.16);
+  padding: 14px;
+  border-radius: var(--dna-radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
+  border: 1px solid rgba(250, 58, 71, 0.14);
   text-align: center;
+  display: grid;
+  gap: 8px;
 }
 
 .archetype-icon {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
 }
 
 .archetype-name {
-  font-weight: bold;
-  color: #edf7ff;
+  color: var(--dna-text);
+  font-weight: 800;
   text-transform: capitalize;
 }
 
 .archetype-percent {
-  font-size: 0.85rem;
-  color: #8be9d7;
+  color: var(--dna-aqua);
+  font-size: 0.88rem;
+  font-weight: 800;
 }
 
-/* Sonic Twins */
 .sonic-twins {
-  background: rgba(255, 255, 255, 0.025);
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid rgba(139, 233, 215, 0.12);
+  display: grid;
+  gap: 16px;
 }
 
-.sonic-twins.loading,
-.sonic-twins.error,
-.sonic-twins.empty {
+.sonic-twins-header {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 1.25rem;
-  min-height: 12rem;
-  gap: 0.75rem;
-}
-
-.sonic-twins.loading .spinner,
-.sonic-twins.error p,
-.sonic-twins.empty p {
-  max-width: 100%;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  line-height: 1.4;
-}
-
-.sonic-twins.loading .spinner {
-  width: 100%;
-  max-width: 22rem;
-  white-space: normal;
-  letter-spacing: normal;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .sonic-twins h3 {
-  margin: 0 0 0.5rem 0;
-  color: #edf7ff;
+  font-size: 1.5rem;
+  margin-bottom: 4px;
+}
+
+.sonic-twins-count {
+  background: rgba(250, 58, 71, 0.16);
+  color: #ffd4d7;
+  border: 1px solid rgba(250, 58, 71, 0.3);
 }
 
 .subtitle {
-  color: rgba(237, 247, 255, 0.72);
-  font-size: 0.9rem;
-  margin: 0 0 1.5rem 0;
+  margin: 0;
+  color: var(--dna-text-muted);
+  line-height: 1.65;
 }
 
 .twins-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
 }
 
 .twin-card {
-  background: rgba(110, 231, 216, 0.06);
-  border: 1px solid rgba(139, 233, 215, 0.16);
-  border-radius: 8px;
-  padding: 1rem;
   position: relative;
-  transition: all 0.3s ease;
+  padding: 18px;
+  border-radius: var(--dna-radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at top left, rgba(250, 58, 71, 0.09), transparent 34%);
+  border: 1px solid rgba(250, 58, 71, 0.16);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
   min-width: 0;
+  overflow: hidden;
+}
+
+.twin-card::after {
+  content: '';
+  position: absolute;
+  inset: auto -20% -32% auto;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(255, 158, 69, 0.1), transparent 68%);
+  pointer-events: none;
 }
 
 .twin-card:hover {
-  background: rgba(110, 231, 216, 0.09);
-  border-color: rgba(139, 233, 215, 0.34);
   transform: translateY(-2px);
+  border-color: rgba(250, 58, 71, 0.32);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03));
 }
 
 .twin-rank {
   position: absolute;
-  top: -12px;
-  left: 1rem;
-  background: linear-gradient(135deg, #6ee7d8, #56d8ff);
-  color: #07111f;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 0.8rem;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(250, 58, 71, 0.14);
+  color: #ffe0e2;
+  border: 1px solid rgba(250, 58, 71, 0.3);
+  font-weight: 900;
 }
 
 .twin-info {
-  margin-top: 0.5rem;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding-right: 44px;
 }
 
 .twin-info h4 {
-  margin: 0 0 0.5rem 0;
-  color: #edf7ff;
+  font-size: 1.1rem;
   word-break: break-word;
 }
 
 .match-score {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.5rem 0;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
 }
 
 .match-score .percentage {
-  font-weight: bold;
-  color: #8be9d7;
-  font-size: 1.1rem;
+  color: var(--dna-aqua);
+  font-size: 1.05rem;
+  font-weight: 900;
 }
 
 .match-score .label {
-  color: rgba(237, 247, 255, 0.6);
-  font-size: 0.85rem;
+  color: var(--dna-text-soft);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .reason {
-  color: rgba(237, 247, 255, 0.68);
-  font-size: 0.9rem;
-  margin: 0.5rem 0 0 0;
+  margin: 0;
+  color: var(--dna-text-muted);
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
 .twin-actions {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: 14px;
 }
 
 .search-btn {
-  flex: 1;
-  padding: 0.5rem;
-  background: linear-gradient(135deg, #6ee7d8, #56d8ff);
-  color: #07111f;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-  transition: all 0.3s ease;
-}
-
-.search-btn:hover {
-  transform: scale(1.05);
+  width: 100%;
 }
 
 .twins-info {
-  background: rgba(255, 255, 255, 0.045);
-  padding: 1rem;
-  border-radius: 8px;
-  border-left: 3px solid #8be9d7;
-}
-
-.twins-info h4 {
-  margin: 0 0 0.5rem 0;
-  color: #edf7ff;
+  border-left: 3px solid rgba(250, 58, 71, 0.55);
 }
 
 .twins-info p {
-  margin: 0;
-  color: rgba(237, 247, 255, 0.68);
-  font-size: 0.9rem;
-  line-height: 1.4;
+  margin: 10px 0 0;
+  color: var(--dna-text-muted);
+  line-height: 1.65;
 }
 
-/* Footer */
 .dna-footer {
+  padding-top: 8px;
+  color: var(--dna-text-soft);
+  font-size: 0.84rem;
+}
+
+.dna-state-panel {
+  display: grid;
+  place-items: center;
   text-align: center;
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(139, 233, 215, 0.12);
-  color: rgba(237, 247, 255, 0.5);
-  font-size: 0.85rem;
+  gap: 12px;
 }
 
 .calculated-at {
@@ -755,37 +939,58 @@
 }
 
 /* Responsive */
-@media (max-width: 768px) {
-  .dna-profile {
-    padding: 1rem;
+@media (max-width: 960px) {
+  .dna-hero,
+  .overview {
+    grid-template-columns: 1fr;
   }
 
-  .dna-header h1 {
-    font-size: 1.8rem;
+  .dna-helix-container {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dna-profile {
+    padding: 14px;
+    border-radius: 22px;
+  }
+
+  .dna-hero-copy,
+  .dna-hero-card,
+  .dna-card,
+  .genre-breakdown,
+  .sonic-twins,
+  .twins-info,
+  .dna-state-panel,
+  .dna-loading-panel,
+  .dna-helix-container {
+    padding: 16px;
+  }
+
+  .dna-hero h1 {
+    font-size: 2rem;
+  }
+
+  .dna-tabs {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 18px;
+    padding: 6px;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+  }
+
+  .dna-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .card-content {
     grid-template-columns: 1fr;
-  }
-
-  .twins-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .dna-tabs {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .tab-btn {
-    text-align: left;
-    border-bottom: none;
-    border-left: 3px solid transparent;
-    padding: 0.7rem 1rem;
-  }
-
-  .tab-btn.active {
-    border-left-color: #8be9d7;
   }
 
   .card-actions,
@@ -795,12 +1000,87 @@
 
   .share-btn,
   .download-btn,
-  .dna-profile .retry-btn {
+  .refresh-btn,
+  .retry-btn,
+  .search-btn {
     width: 100%;
   }
 
-  .dna-card-container,
-  .sonic-twins {
-    padding: 1rem;
+  .decade {
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+  }
+
+  .sonic-twins-header {
+    align-items: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .dna-profile {
+    padding: 12px;
+  }
+
+  .dna-hero h1 {
+    max-width: 100%;
+  }
+
+  .dna-hero-card-value {
+    max-width: 100%;
+  }
+
+  .dna-signal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dna-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dna-signal {
+  padding: 14px;
+  border-radius: var(--dna-radius-md);
+  border: 1px solid rgba(250, 58, 71, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+  min-width: 0;
+}
+
+.dna-signal-label {
+  display: block;
+  color: var(--dna-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.dna-signal-value {
+  color: var(--dna-text);
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
+}
+
+.dna-signal--aqua {
+  border-color: rgba(250, 58, 71, 0.26);
+}
+
+.dna-signal--gold {
+  border-color: rgba(255, 158, 69, 0.26);
+}
+
+.dna-signal--rose {
+  border-color: rgba(255, 95, 95, 0.26);
+}
+
+.dna-signal--violet {
+  border-color: rgba(255, 118, 71, 0.26);
+}
+
+@media (max-width: 920px) {
+  .dna-signal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
